@@ -30,4 +30,11 @@ public interface IProductCatalogue {
 	 */
 	boolean setMinimumStockLevel(String productID, int level);
 
+	/**
+	 * 
+	 * @param itemID
+	 * @param quantity
+	 */
+	void addStock(int itemID, int quantity);
+
 }

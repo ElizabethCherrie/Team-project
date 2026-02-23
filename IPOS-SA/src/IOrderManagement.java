@@ -23,7 +23,7 @@ public interface IOrderManagement {
 	 * 
 	 * @param merchantID
 	 */
-	Order[] listOrdersForMerchant(String merchantID);
+	Order[] orderHistory(String merchantID);
 
 	/**
 	 * 
@@ -36,5 +36,27 @@ public interface IOrderManagement {
 	 * @param orderID
 	 */
 	boolean cancelOrder(String orderID);
+
+	/**
+	 * 
+	 * @param orderID
+	 */
+	Invoice raiseInvoice(String orderID);
+
+	/**
+	 * 
+	 * @param merchantID
+	 * @param payment
+	 */
+	boolean recordPayment(String merchantID, Payment payment);
+
+	/**
+	 * 
+	 * @param orderID
+	 * @param courier
+	 * @param dispatchDate
+	 * @param trackingNo
+	 */
+	boolean updateDispatchInfo(String orderID, String courier, Date dispatchDate, String trackingNo);
 
 }
