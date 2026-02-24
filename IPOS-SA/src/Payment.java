@@ -1,3 +1,5 @@
+import java.util.Date;
+
 public class Payment {
 
 	private String paymentID;
@@ -5,7 +7,9 @@ public class Payment {
 	private double amount;
 	private Date date;
 
-	public String getPaymentID() {
+
+
+    public String getPaymentID() {
 		return this.paymentID;
 	}
 
@@ -41,4 +45,11 @@ public class Payment {
 		this.date = date;
 	}
 
+	public void setAmount(Double amount) {
+		this.amount = amount;
+	}
+
+	public double getAmount() {
+		return this.amount;
+	}
 }
