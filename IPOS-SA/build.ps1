@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$srcRoot = Join-Path $projectRoot "src"
+$srcRoot = Join-Path $projectRoot "src\ipossa"
 $outRoot = Join-Path $projectRoot "out"
 $libJar = Join-Path $projectRoot "lib\sqlite-jdbc-3.49.1.0.jar"
 
