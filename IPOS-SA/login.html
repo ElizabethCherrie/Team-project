@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPOS-SA Login</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-body">
+<div class="background-orbit orbit-a"></div>
+<div class="background-orbit orbit-b"></div>
+
+<main class="login-shell">
+    <section class="panel login-hero">
+        <div class="brand-lockup">
+            <img src="logo.svg" alt="London Software House logo" class="brand-logo">
+            <div>
+                <p class="eyebrow">London Software House</p>
+                <h1>IPOS-SA</h1>
+            </div>
+        </div>
+        <p class="lead">
+            Server Application control surface for Team 28. Sign in with a seeded role to access the dashboard for
+            merchant administration, catalogue control, operations, accounting, reporting, and merchant ordering.
+        </p>
+        <div class="callout-grid">
+            <article class="callout">
+                <span>Shared API</span>
+                <strong>SQLite-backed REST services</strong>
+            </article>
+            <article class="callout">
+                <span>Demo Roles</span>
+                <strong>Admin, Manager, Ops, Accounts, Merchant</strong>
+            </article>
+            <article class="callout">
+                <span>Next Step</span>
+                <strong>Separate dashboard pages by role in one flow</strong>
+            </article>
+        </div>
+    </section>
+
+    <section class="panel login-panel login-panel-wide">
+        <div class="section-heading">
+            <p class="eyebrow">Access</p>
+            <h2>Login</h2>
+        </div>
+        <form id="login-form" class="form-grid">
+            <label>
+                API Base URL
+                <input id="api-base" type="text" value="">
+            </label>
+            <label>
+                Username
+                <input id="username" type="text" value="merchant1">
+            </label>
+            <label>
+                Password
+                <input id="password" type="password" value="merchant123">
+            </label>
+            <button type="submit" class="primary-btn">Enter Dashboard</button>
+        </form>
+
+        <div class="seeded-users">
+            <button class="seed-btn" data-user="admin" data-pass="admin123" type="button">Admin</button>
+            <button class="seed-btn" data-user="manager" data-pass="manager123" type="button">Manager</button>
+            <button class="seed-btn" data-user="ops" data-pass="ops123" type="button">Operations</button>
+            <button class="seed-btn" data-user="accounts" data-pass="accounts123" type="button">Accounting</button>
+            <button class="seed-btn" data-user="merchant1" data-pass="merchant123" type="button">Merchant</button>
+        </div>
+
+        <div id="status-banner" class="status-banner hidden"></div>
+    </section>
+</main>
+
+<script src="login.js"></script>
+</body>
+</html>
