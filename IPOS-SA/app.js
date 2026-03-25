@@ -20,6 +20,7 @@ const roleModules = {
       desc: "Create, inspect, update, and delete merchant accounts.",
       pill: "Admin",
       fields: [
+        { name: "merchantSearch", label: "Search Merchant", value: "cosymed" },
         { name: "merchantId", label: "Merchant ID", value: "M1001" },
         { name: "username", label: "Username", value: "merchant1001" },
         { name: "password", label: "Password", value: "merchant1001" },
@@ -32,6 +33,8 @@ const roleModules = {
       ],
       buttons: [
         { label: "List Merchants", action: "listMerchants" },
+        { label: "Search Merchants", action: "searchMerchants" },
+        { label: "Get Merchant", action: "getMerchant" },
         { label: "Create Merchant", action: "createMerchant" },
         { label: "Delete Merchant", action: "deleteMerchant" },
       ],
@@ -83,6 +86,7 @@ const roleModules = {
         { name: "newStatus", label: "Restore To", value: "NORMAL" },
       ],
       buttons: [
+        { label: "Get Merchant", action: "getMerchant" },
         { label: "View Balance", action: "merchantBalance" },
         { label: "Update Discount", action: "updateDiscount" },
         { label: "Restore Account", action: "restoreMerchant" },
@@ -100,8 +104,12 @@ const roleModules = {
       buttons: [
         { label: "Low Stock", action: "reportLowStock" },
         { label: "Turnover", action: "reportTurnover" },
+        { label: "Stock Turnover", action: "reportStockTurnover" },
         { label: "Merchant Orders", action: "reportMerchantOrders" },
         { label: "Merchant Activity", action: "reportMerchantActivity" },
+        { label: "Merchant Invoices", action: "reportMerchantInvoices" },
+        { label: "Company Invoices", action: "reportCompanyInvoices" },
+        { label: "Debtor Reminders", action: "reportDebtorReminders" },
       ],
     },
     {
@@ -128,6 +136,7 @@ const roleModules = {
       fields: [
         { name: "orderId", label: "Order ID", value: "1" },
         { name: "status", label: "Status", value: "DISPATCHED" },
+        { name: "invoiceId", label: "Invoice ID", value: "1" },
         { name: "courier", label: "Courier", value: "DHL" },
         { name: "trackingNumber", label: "Tracking Number", value: "DHL-1001" },
         { name: "expectedDelivery", label: "Expected Delivery", value: "2026-03-28" },
@@ -135,9 +144,12 @@ const roleModules = {
       ],
       buttons: [
         { label: "List Pending Orders", action: "listPendingOrders" },
+        { label: "Search Orders", action: "searchOrders" },
         { label: "Get Order", action: "getOrder" },
         { label: "Update Status", action: "updateOrderStatus" },
         { label: "Generate Invoice", action: "generateInvoice" },
+        { label: "View Invoice", action: "getInvoice" },
+        { label: "Print Invoice", action: "printInvoice" },
       ],
     },
   ],
@@ -156,6 +168,7 @@ const roleModules = {
         { label: "List Payments", action: "listPayments" },
         { label: "Record Payment", action: "recordPayment" },
         { label: "Merchant Balance", action: "merchantBalance" },
+        { label: "Debtor Reminders", action: "reportDebtorReminders" },
       ],
     },
   ],
@@ -178,12 +191,15 @@ const roleModules = {
       pill: "Merchant",
       fields: [
         { name: "merchantId", label: "Merchant ID", value: "M0001" },
+        { name: "invoiceId", label: "Invoice ID", value: "1" },
         { name: "orderJson", label: "Order Items JSON", type: "textarea", value: '[{"productId":"10000001","quantity":5},{"productId":"10000003","quantity":2}]' },
       ],
       buttons: [
         { label: "Create Order", action: "createOrder" },
         { label: "View My Orders", action: "listMyOrders" },
         { label: "View My Invoices", action: "listMyInvoices" },
+        { label: "View Invoice", action: "getInvoice" },
+        { label: "Print Invoice", action: "printInvoice" },
         { label: "View My Balance", action: "merchantBalance" },
       ],
     },
@@ -215,7 +231,6 @@ function renderSession() {
   sessionCard.innerHTML = `
     <div class="session-chip">${state.session.role}</div>
     <h3>${state.session.username}</h3>
-    <p>API Base: ${state.apiBase}</p>
     <p>${state.session.merchantId ? `Merchant ID: ${state.session.merchantId}` : "No merchant binding"}</p>
     ${warnings.length ? `<p><strong>Warnings:</strong> ${warnings.map(formatWarning).join(" | ")}</p>` : "<p>No active warnings.</p>"}
   `;
@@ -283,6 +298,12 @@ async function runAction(action, form) {
     switch (action) {
       case "listMerchants":
         result = await apiRequest("/merchants");
+        break;
+      case "searchMerchants":
+        result = await apiRequest(`/merchants?q=${encodeURIComponent(values.merchantSearch || "")}`);
+        break;
+      case "getMerchant":
+        result = await apiRequest(`/merchants/${values.merchantId || state.session.merchantId}`);
         break;
       case "createMerchant":
         result = await apiRequest("/merchants", {
@@ -363,11 +384,23 @@ async function runAction(action, form) {
       case "reportTurnover":
         result = await apiRequest(`/reports/turnover?start=${values.start}&end=${values.end}`);
         break;
+      case "reportStockTurnover":
+        result = await apiRequest(`/reports/stock-turnover?start=${values.start}&end=${values.end}`);
+        break;
       case "reportMerchantOrders":
         result = await apiRequest(`/reports/merchant-orders?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
         break;
       case "reportMerchantActivity":
         result = await apiRequest(`/reports/merchant-activity?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
+        break;
+      case "reportMerchantInvoices":
+        result = await apiRequest(`/reports/merchant-invoices?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
+        break;
+      case "reportCompanyInvoices":
+        result = await apiRequest(`/reports/company-invoices?start=${values.start}&end=${values.end}`);
+        break;
+      case "reportDebtorReminders":
+        result = await apiRequest("/reports/debtor-reminders");
         break;
       case "createApplication":
         result = await apiRequest("/non-commercial-applications", {
@@ -393,6 +426,9 @@ async function runAction(action, form) {
       case "listPendingOrders":
         result = await apiRequest("/orders/pending");
         break;
+      case "searchOrders":
+        result = await apiRequest(`/orders?orderId=${encodeURIComponent(values.orderId || "")}&status=${encodeURIComponent(values.status || "")}`);
+        break;
       case "getOrder":
         result = await apiRequest(`/orders/${values.orderId}`);
         break;
@@ -411,6 +447,14 @@ async function runAction(action, form) {
       case "generateInvoice":
         result = await apiRequest(`/orders/${values.orderId}/invoice`, { method: "POST" });
         break;
+      case "getInvoice":
+        result = await apiRequest(`/invoices/${values.invoiceId}`);
+        break;
+      case "printInvoice": {
+        result = await apiRequest(`/invoices/${values.invoiceId}`);
+        appendPrintable(result.invoice_id ? `Invoice ${result.invoice_id}` : "Invoice", result.printableText || JSON.stringify(result, null, 2), true);
+        break;
+      }
       case "listPayments":
         result = await apiRequest("/payments");
         break;
@@ -464,11 +508,8 @@ async function apiRequest(path, options = {}) {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
-  if (state.session?.role) {
-    headers["X-Role"] = state.session.role;
-  }
-  if (state.session?.merchantId) {
-    headers["X-Merchant-Id"] = state.session.merchantId;
+  if (state.session?.sessionToken) {
+    headers["X-Session-Token"] = state.session.sessionToken;
   }
   const response = await fetch(`${state.apiBase}${path}`, {
     method: options.method || "GET",
@@ -497,7 +538,7 @@ function appendOutput(title, payload) {
   workspaceTitle.textContent = title;
 }
 
-function appendPrintable(title, text) {
+function appendPrintable(title, text, autoPrint = false) {
   const block = document.createElement("div");
   block.className = "output-block";
   block.innerHTML = `
@@ -505,9 +546,14 @@ function appendPrintable(title, text) {
       <strong>${title} Printable Output</strong>
       <span>${new Date().toLocaleTimeString()}</span>
     </div>
+    <div class="seeded-users"><button type="button" class="print-btn">Print</button></div>
     <pre>${escapeHtml(text)}</pre>
   `;
+  block.querySelector(".print-btn").addEventListener("click", () => openPrintWindow(title, text));
   workspaceBody.prepend(block);
+  if (autoPrint) {
+    openPrintWindow(title, text);
+  }
 }
 
 function setBanner(message, kind) {
@@ -583,4 +629,32 @@ function defaultApiBase() {
     return `${window.location.origin}/api`;
   }
   return "http://localhost:8080/api";
+}
+
+function openPrintWindow(title, text) {
+  const popup = window.open("", "_blank", "width=900,height=700");
+  if (!popup) {
+    throw new Error("Popup blocked. Please allow popups to print.");
+  }
+  popup.document.write(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>${escapeHtml(title)}</title>
+      <style>
+        body { font-family: Georgia, serif; padding: 32px; color: #111; }
+        h1 { margin-bottom: 20px; }
+        pre { white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+      </style>
+    </head>
+    <body>
+      <h1>${escapeHtml(title)}</h1>
+      <pre>${escapeHtml(text)}</pre>
+    </body>
+    </html>
+  `);
+  popup.document.close();
+  popup.focus();
+  popup.print();
 }

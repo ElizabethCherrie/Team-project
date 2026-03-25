@@ -107,7 +107,7 @@ final class ApiHandler implements HttpHandler {
     private void handleMerchants(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (parts.size() == 1 && "GET".equals(method)) {
             requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF", "MERCHANT");
-            writeJson(exchange, 200, Map.of("merchants", db.listMerchants(exchange.getRequestHeaders())));
+            writeJson(exchange, 200, Map.of("merchants", db.listMerchants(exchange.getRequestHeaders(), query(exchange))));
             return;
         }
         if (parts.size() == 1 && "POST".equals(method)) {
@@ -279,6 +279,7 @@ final class ApiHandler implements HttpHandler {
             case "turnover" -> db.turnoverReport(query);
             case "stock-turnover" -> db.stockTurnoverReport(query);
             case "low-stock" -> db.lowStockReport();
+            case "debtor-reminders" -> db.debtorRemindersReport();
             case "merchant-orders" -> db.merchantOrdersReport(query);
             case "merchant-activity" -> db.merchantActivityReport(query);
             case "merchant-invoices" -> db.merchantInvoicesReport(query);
@@ -328,15 +329,8 @@ final class ApiHandler implements HttpHandler {
         return params;
     }
 
-    private static void requireRole(HttpExchange exchange, String... allowedRoles) {
-        String role = exchange.getRequestHeaders().getFirst("X-Role");
-        String normalized = role == null ? null : role.trim().toUpperCase(Locale.ROOT);
-        for (String allowed : allowedRoles) {
-            if (allowed.equals(normalized)) {
-                return;
-            }
-        }
-        throw new ApiException(403, "Operation requires one of roles: " + String.join(", ", allowedRoles));
+    private void requireRole(HttpExchange exchange, String... allowedRoles) throws Exception {
+        db.authorize(exchange.getRequestHeaders(), allowedRoles);
     }
 
     private static List<String> splitPath(String path) {
@@ -354,7 +348,7 @@ final class ApiHandler implements HttpHandler {
         Headers headers = exchange.getResponseHeaders();
         headers.set("Content-Type", "application/json; charset=utf-8");
         headers.set("Access-Control-Allow-Origin", "*");
-        headers.set("Access-Control-Allow-Headers", "Content-Type, X-Role, X-Merchant-Id");
+        headers.set("Access-Control-Allow-Headers", "Content-Type, X-Session-Token");
         exchange.sendResponseHeaders(statusCode, bytes.length);
         try (OutputStream out = exchange.getResponseBody()) {
             out.write(bytes);

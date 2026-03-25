@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 final class Database {
     private final Path dbPath;
@@ -161,6 +162,16 @@ final class Database {
                         processed_at TEXT
                     )
                     """);
+            statement.execute("""
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        session_token TEXT PRIMARY KEY,
+                        username TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        merchant_id TEXT,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+                    )
+                    """);
         }
         seed();
     }
@@ -182,9 +193,25 @@ final class Database {
                     throw new ApiException(403, "Account is inactive");
                 }
                 Map<String, Object> response = new LinkedHashMap<>();
+                String sessionToken = UUID.randomUUID().toString();
+                try (PreparedStatement deleteSessions = connection.prepareStatement("DELETE FROM sessions WHERE username = ?");
+                     PreparedStatement insertSession = connection.prepareStatement("""
+                             INSERT INTO sessions (session_token, username, role, merchant_id, created_at)
+                             VALUES (?, ?, ?, ?, ?)
+                             """)) {
+                    deleteSessions.setString(1, rs.getString("username"));
+                    deleteSessions.executeUpdate();
+                    insertSession.setString(1, sessionToken);
+                    insertSession.setString(2, rs.getString("username"));
+                    insertSession.setString(3, rs.getString("role"));
+                    insertSession.setString(4, rs.getString("merchant_id"));
+                    insertSession.setString(5, now());
+                    insertSession.executeUpdate();
+                }
                 response.put("username", rs.getString("username"));
                 response.put("role", rs.getString("role"));
                 response.put("merchantId", rs.getString("merchant_id"));
+                response.put("sessionToken", sessionToken);
                 if ("MERCHANT".equals(rs.getString("role")) && rs.getString("merchant_id") != null) {
                     response.put("merchant", getMerchantById(connection, rs.getString("merchant_id")));
                     response.put("warnings", evaluateMerchantAccount(connection, rs.getString("merchant_id")).get("warnings"));
@@ -256,24 +283,54 @@ final class Database {
         return Map.of("message", "User deleted");
     }
 
-    List<Map<String, Object>> listMerchants(Headers headers) throws SQLException {
-        try (Connection connection = connect();
-             Statement statement = connection.createStatement();
-             ResultSet rs = statement.executeQuery("SELECT * FROM merchants ORDER BY merchant_id")) {
-            List<Map<String, Object>> merchants = rows(rs);
-            if (isMerchant(headers)) {
-                String merchantId = authenticatedMerchantId(headers);
-                merchants.removeIf(row -> !merchantId.equals(row.get("merchant_id")));
+    AuthContext authorize(Headers headers, String... allowedRoles) throws SQLException {
+        try (Connection connection = connect()) {
+            AuthContext auth = resolveAuth(connection, headers);
+            for (String allowedRole : allowedRoles) {
+                if (allowedRole.equals(auth.role())) {
+                    return auth;
+                }
             }
-            return merchants;
+            throw new ApiException(403, "Operation requires one of roles: " + String.join(", ", allowedRoles));
+        }
+    }
+
+    List<Map<String, Object>> listMerchants(Headers headers, Map<String, String> query) throws SQLException {
+        try (Connection connection = connect()) {
+            AuthContext auth = resolveAuth(connection, headers);
+            StringBuilder sql = new StringBuilder("SELECT * FROM merchants WHERE 1 = 1");
+            List<Object> params = new ArrayList<>();
+            String search = query.getOrDefault("q", "").trim().toLowerCase(Locale.ROOT);
+            if ("MERCHANT".equals(auth.role())) {
+                sql.append(" AND merchant_id = ?");
+                params.add(auth.merchantId());
+            }
+            if (!search.isBlank()) {
+                sql.append(" AND (LOWER(merchant_id) LIKE ? OR LOWER(name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(account_status) LIKE ?)");
+                String pattern = "%" + search + "%";
+                params.add(pattern);
+                params.add(pattern);
+                params.add(pattern);
+                params.add(pattern);
+            }
+            sql.append(" ORDER BY merchant_id");
+            try (PreparedStatement ps = connection.prepareStatement(sql.toString())) {
+                for (int i = 0; i < params.size(); i++) {
+                    ps.setObject(i + 1, params.get(i));
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rows(rs);
+                }
+            }
         }
     }
 
     Map<String, Object> getMerchant(Headers headers, String merchantId) throws SQLException {
-        if (isMerchant(headers) && !authenticatedMerchantId(headers).equals(merchantId)) {
-            throw new ApiException(403, "Merchants can only view their own account");
-        }
         try (Connection connection = connect()) {
+            AuthContext auth = resolveAuth(connection, headers);
+            if ("MERCHANT".equals(auth.role()) && !Objects.equals(auth.merchantId(), merchantId)) {
+                throw new ApiException(403, "Merchants can only view their own account");
+            }
             Map<String, Object> merchant = getMerchantById(connection, merchantId);
             merchant.put("warnings", evaluateMerchantAccount(connection, merchantId).get("warnings"));
             return merchant;
@@ -386,17 +443,23 @@ final class Database {
     }
 
     Map<String, Object> getMerchantBalance(Headers headers, String merchantId) throws SQLException {
-        if (isMerchant(headers) && !authenticatedMerchantId(headers).equals(merchantId)) {
-            throw new ApiException(403, "Merchants can only view their own balance");
-        }
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("SELECT balance, account_status FROM merchants WHERE merchant_id = ?")) {
+            AuthContext auth = resolveAuth(connection, headers);
+            if ("MERCHANT".equals(auth.role()) && !Objects.equals(auth.merchantId(), merchantId)) {
+                throw new ApiException(403, "Merchants can only view their own balance");
+            }
             ps.setString(1, merchantId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     throw new ApiException(404, "Merchant not found");
                 }
-                return Map.of("merchantId", merchantId, "balance", rs.getDouble(1), "accountStatus", rs.getString(2));
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("merchantId", merchantId);
+                result.put("balance", rs.getDouble(1));
+                result.put("accountStatus", rs.getString(2));
+                result.put("warnings", evaluateMerchantAccount(connection, merchantId).get("warnings"));
+                return result;
             }
         }
     }
@@ -608,14 +671,15 @@ final class Database {
 
     Map<String, Object> createOrder(Headers headers, Map<String, Object> body) throws SQLException {
         String merchantId = JsonUtil.requireString(body, "merchantId");
-        if (!authenticatedMerchantId(headers).equals(merchantId)) {
-            throw new ApiException(403, "Merchants can only place orders for their own account");
-        }
         List<Object> requestedItems = JsonUtil.requireArray(body, "items");
         if (requestedItems.isEmpty()) {
             throw new ApiException(400, "Order must contain at least one item");
         }
         try (Connection connection = connect()) {
+            AuthContext auth = resolveAuth(connection, headers);
+            if (!Objects.equals(auth.merchantId(), merchantId)) {
+                throw new ApiException(403, "Merchants can only place orders for their own account");
+            }
             connection.setAutoCommit(false);
             try {
                 String accountStatus = Objects.toString(evaluateMerchantAccount(connection, merchantId).get("accountStatus"), "NORMAL");
@@ -713,15 +777,20 @@ final class Database {
 
     List<Map<String, Object>> listOrders(Headers headers, Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
+            AuthContext auth = resolveAuth(connection, headers);
             StringBuilder sql = new StringBuilder("SELECT * FROM orders WHERE 1 = 1");
             List<Object> params = new ArrayList<>();
             String merchantId = query.get("merchantId");
-            if (isMerchant(headers)) {
-                merchantId = authenticatedMerchantId(headers);
+            if ("MERCHANT".equals(auth.role())) {
+                merchantId = auth.merchantId();
             }
             if (merchantId != null && !merchantId.isBlank()) {
                 sql.append(" AND merchant_id = ?");
                 params.add(merchantId);
+            }
+            if (query.containsKey("orderId") && !query.get("orderId").isBlank()) {
+                sql.append(" AND order_id = ?");
+                params.add(Long.parseLong(query.get("orderId")));
             }
             if (query.containsKey("status")) {
                 sql.append(" AND status = ?");
@@ -746,7 +815,8 @@ final class Database {
     Map<String, Object> getOrder(Headers headers, long orderId) throws SQLException {
         try (Connection connection = connect()) {
             Map<String, Object> order = getOrderById(connection, orderId);
-            if (isMerchant(headers) && !authenticatedMerchantId(headers).equals(order.get("merchant_id"))) {
+            AuthContext auth = resolveAuth(connection, headers);
+            if ("MERCHANT".equals(auth.role()) && !Objects.equals(auth.merchantId(), order.get("merchant_id"))) {
                 throw new ApiException(403, "Merchants can only view their own orders");
             }
             order.put("items", getOrderItems(connection, orderId));
@@ -774,26 +844,32 @@ final class Database {
             JsonUtil.requireString(body, "trackingNumber");
             JsonUtil.requireString(body, "expectedDelivery");
         }
-        try (Connection connection = connect();
-             PreparedStatement ps = connection.prepareStatement("""
-                     UPDATE orders
-                     SET status = ?, dispatched_by = COALESCE(?, dispatched_by),
-                         dispatch_date = COALESCE(?, dispatch_date), courier = COALESCE(?, courier),
-                         tracking_number = COALESCE(?, tracking_number), expected_delivery = COALESCE(?, expected_delivery),
-                         delivered_date = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_date END
-                     WHERE order_id = ?
-                     """)) {
-            ps.setString(1, newStatus);
-            setNullable(ps, 2, JsonUtil.optionalString(body, "dispatchedBy"));
-            setNullable(ps, 3, JsonUtil.optionalString(body, "dispatchDate"));
-            setNullable(ps, 4, JsonUtil.optionalString(body, "courier"));
-            setNullable(ps, 5, JsonUtil.optionalString(body, "trackingNumber"));
-            setNullable(ps, 6, JsonUtil.optionalString(body, "expectedDelivery"));
-            ps.setString(7, newStatus);
-            ps.setString(8, "DELIVERED".equals(newStatus) ? now() : null);
-            ps.setLong(9, orderId);
-            if (ps.executeUpdate() == 0) {
-                throw new ApiException(404, "Order not found");
+        try (Connection connection = connect()) {
+            Map<String, Object> order = getOrderById(connection, orderId);
+            String currentStatus = Objects.toString(order.get("status"), "ACCEPTED");
+            if (!isValidOrderTransition(currentStatus, newStatus)) {
+                throw new ApiException(400, "Invalid order transition from " + currentStatus + " to " + newStatus);
+            }
+            try (PreparedStatement ps = connection.prepareStatement("""
+                    UPDATE orders
+                    SET status = ?, dispatched_by = COALESCE(?, dispatched_by),
+                        dispatch_date = COALESCE(?, dispatch_date), courier = COALESCE(?, courier),
+                        tracking_number = COALESCE(?, tracking_number), expected_delivery = COALESCE(?, expected_delivery),
+                        delivered_date = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_date END
+                    WHERE order_id = ?
+                    """)) {
+                ps.setString(1, newStatus);
+                setNullable(ps, 2, JsonUtil.optionalString(body, "dispatchedBy"));
+                setNullable(ps, 3, JsonUtil.optionalString(body, "dispatchDate", "DISPATCHED".equals(newStatus) ? now() : null));
+                setNullable(ps, 4, JsonUtil.optionalString(body, "courier"));
+                setNullable(ps, 5, JsonUtil.optionalString(body, "trackingNumber"));
+                setNullable(ps, 6, JsonUtil.optionalString(body, "expectedDelivery"));
+                ps.setString(7, newStatus);
+                ps.setString(8, "DELIVERED".equals(newStatus) ? now() : null);
+                ps.setLong(9, orderId);
+                if (ps.executeUpdate() == 0) {
+                    throw new ApiException(404, "Order not found");
+                }
             }
         }
         return Map.of("message", "Order status updated", "status", newStatus);
@@ -807,11 +883,12 @@ final class Database {
 
     List<Map<String, Object>> listInvoices(Headers headers, Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
+            AuthContext auth = resolveAuth(connection, headers);
             StringBuilder sql = new StringBuilder("SELECT * FROM invoices WHERE 1 = 1");
             List<Object> params = new ArrayList<>();
             String merchantId = query.get("merchantId");
-            if (isMerchant(headers)) {
-                merchantId = authenticatedMerchantId(headers);
+            if ("MERCHANT".equals(auth.role())) {
+                merchantId = auth.merchantId();
             }
             if (merchantId != null && !merchantId.isBlank()) {
                 sql.append(" AND merchant_id = ?");
@@ -840,13 +917,14 @@ final class Database {
     Map<String, Object> getInvoice(Headers headers, long invoiceId) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("SELECT * FROM invoices WHERE invoice_id = ?")) {
+            AuthContext auth = resolveAuth(connection, headers);
             ps.setLong(1, invoiceId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     throw new ApiException(404, "Invoice not found");
                 }
                 Map<String, Object> invoice = row(rs);
-                if (isMerchant(headers) && !authenticatedMerchantId(headers).equals(invoice.get("merchant_id"))) {
+                if ("MERCHANT".equals(auth.role()) && !Objects.equals(auth.merchantId(), invoice.get("merchant_id"))) {
                     throw new ApiException(403, "Merchants can only view their own invoices");
                 }
                 invoice.put("order", getOrderById(connection, ((Number) invoice.get("order_id")).longValue()));
@@ -964,6 +1042,33 @@ final class Database {
         try (Connection connection = connect()) {
             List<Map<String, Object>> data = lowStockRows(connection);
             return report("Low Stock Report", data, printableLowStock(data));
+        }
+    }
+
+    Map<String, Object> debtorRemindersReport() throws SQLException {
+        try (Connection connection = connect();
+             PreparedStatement ps = connection.prepareStatement("""
+                     SELECT m.merchant_id, m.name, m.account_status, m.balance,
+                            MIN(i.due_date) AS oldest_due_date,
+                            MAX(CAST(julianday('now') - julianday(i.due_date) AS INTEGER)) AS overdue_days
+                     FROM merchants m
+                     JOIN invoices i ON i.merchant_id = m.merchant_id
+                     WHERE i.status != 'PAID' AND i.due_date < date('now')
+                     GROUP BY m.merchant_id, m.name, m.account_status, m.balance
+                     ORDER BY overdue_days DESC, m.merchant_id
+                     """);
+             ResultSet rs = ps.executeQuery()) {
+            List<Map<String, Object>> data = rows(rs);
+            StringBuilder printable = new StringBuilder("Debtor Reminders Report\n\n");
+            for (Map<String, Object> row : data) {
+                printable.append(row.get("merchant_id"))
+                        .append(" | ").append(row.get("name"))
+                        .append(" | status=").append(row.get("account_status"))
+                        .append(" | overdueDays=").append(row.get("overdue_days"))
+                        .append(" | balance=").append(row.get("balance"))
+                        .append("\n");
+            }
+            return report("Debtor Reminders Report", data, printable.toString());
         }
     }
 
@@ -1519,21 +1624,40 @@ final class Database {
         return connection;
     }
 
-    private static boolean isMerchant(Headers headers) {
-        return "MERCHANT".equals(roleFrom(headers));
-    }
-
-    private static String roleFrom(Headers headers) {
-        String role = headers.getFirst("X-Role");
-        return role == null ? null : role.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private static String authenticatedMerchantId(Headers headers) {
-        String merchantId = headers.getFirst("X-Merchant-Id");
-        if (merchantId == null || merchantId.isBlank()) {
-            throw new ApiException(401, "Missing X-Merchant-Id header");
+    private AuthContext resolveAuth(Connection connection, Headers headers) throws SQLException {
+        String sessionToken = headers.getFirst("X-Session-Token");
+        if (sessionToken == null || sessionToken.isBlank()) {
+            throw new ApiException(401, "Missing X-Session-Token header");
         }
-        return merchantId;
+        try (PreparedStatement ps = connection.prepareStatement("""
+                SELECT s.username, s.role, s.merchant_id, u.active
+                FROM sessions s
+                JOIN users u ON u.username = s.username
+                WHERE s.session_token = ?
+                """)) {
+            ps.setString(1, sessionToken);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new ApiException(401, "Session is invalid or expired");
+                }
+                if (rs.getInt("active") != 1) {
+                    throw new ApiException(403, "Account is inactive");
+                }
+                return new AuthContext(rs.getString("username"), rs.getString("role"), rs.getString("merchant_id"));
+            }
+        }
+    }
+
+    private static boolean isValidOrderTransition(String currentStatus, String newStatus) {
+        if (Objects.equals(currentStatus, newStatus)) {
+            return true;
+        }
+        return switch (currentStatus) {
+            case "ACCEPTED" -> "PROCESSING".equals(newStatus);
+            case "PROCESSING" -> "DISPATCHED".equals(newStatus);
+            case "DISPATCHED" -> "DELIVERED".equals(newStatus);
+            default -> false;
+        };
     }
 
     private static String requireQuery(Map<String, String> query, String key) {
@@ -1586,6 +1710,8 @@ final class Database {
         }
         return value;
     }
+
+    record AuthContext(String username, String role, String merchantId) {}
 
     private record Range(LocalDate start, LocalDate end) {}
 }
