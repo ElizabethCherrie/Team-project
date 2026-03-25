@@ -233,8 +233,8 @@ final class Database {
                          active = COALESCE(?, active)
                      WHERE username = ?
                      """)) {
-            setNullable(ps, 1, body.containsKey("password") ? JsonUtil.requireString(body, "password") : null);
-            setNullable(ps, 2, body.containsKey("role") ? JsonUtil.requireUpper(body, "role") : null);
+            setNullable(ps, 1, body.containsKey("password") ? ipossa.JsonUtil.requireString(body, "password") : null);
+            setNullable(ps, 2, body.containsKey("role") ? ipossa.JsonUtil.requireUpper(body, "role") : null);
             setNullable(ps, 3, body.containsKey("merchantId") ? JsonUtil.optionalString(body, "merchantId") : null);
             setNullable(ps, 4, body.containsKey("active") ? (JsonUtil.requireBoolean(body, "active") ? 1 : 0) : null);
             ps.setString(5, username);
