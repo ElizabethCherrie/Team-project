@@ -29,6 +29,14 @@ final class Database {
         this.dbPath = dbPath;
     }
 
+    /**
+     * Initializes the database schema and seeds the database with default data.
+     * <p>
+     * This method enables foreign key enforcement, creates all required tables if they do not already
+     * exist, and then populates the database with any default records needed for application startup.
+     *
+     * @throws SQLException if a database access error occurs while creating the schema or seeding data
+     */
     void bootstrap() throws SQLException {
         try (Connection connection = connect(); Statement statement = connection.createStatement()) {
             statement.execute("PRAGMA foreign_keys = ON");
@@ -176,6 +184,18 @@ final class Database {
         seed();
     }
 
+    /**
+     * Authenticates a user by username and password and creates a new session token.
+     * <p>
+     * If the credentials are valid and the account is active, any existing sessions for the user are removed,
+     * a new session is stored, and the returned map contains the authenticated user's identity, role,
+     * optional merchant details, and any account warnings.
+     *
+     * @param username the user's username
+     * @param password the user's password
+     * @return a map containing the login result, including a session token and user details
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> login(String username, String password) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -225,6 +245,15 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves all users from the database ordered by username.
+     * <p>
+     * The returned list contains one map per user, with the selected user fields converted from the
+     * result set into a JSON-friendly structure.
+     *
+     * @return a list of user records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listUsers() throws SQLException {
         try (Connection connection = connect();
              Statement statement = connection.createStatement();
@@ -233,6 +262,16 @@ final class Database {
         }
     }
 
+    /**
+     * Creates a new user record in the database.
+     * <p>
+     * The user is inserted with the provided username, password, role, optional merchant association,
+     * active status, and the current timestamp.
+     *
+     * @param body a map containing the user data to persist
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> createUser(Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -250,6 +289,17 @@ final class Database {
         return Map.of("message", "User created");
     }
 
+    /**
+     * Updates an existing user record identified by username.
+     * <p>
+     * Only the fields present in the provided body are updated; missing fields keep their current values.
+     * If no user exists for the given username, an exception is thrown.
+     *
+     * @param username the username of the user to update
+     * @param body a map containing the fields to update
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> updateUser(String username, Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -272,6 +322,15 @@ final class Database {
         return Map.of("message", "User updated");
     }
 
+    /**
+     * Deletes a user record identified by username.
+     * <p>
+     * If no matching user exists, an exception is thrown.
+     *
+     * @param username the username of the user to delete
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> deleteUser(String username) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("DELETE FROM users WHERE username = ?")) {
@@ -283,6 +342,17 @@ final class Database {
         return Map.of("message", "User deleted");
     }
 
+    /**
+     * Verifies that the current request is authenticated and has one of the allowed roles.
+     * <p>
+     * The session token is resolved from the request headers, and the resulting authentication context
+     * is returned only if the user's role matches one of the permitted roles.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param allowedRoles the roles permitted to perform the operation
+     * @return the resolved authentication context for the current session
+     * @throws SQLException if a database access error occurs
+     */
     AuthContext authorize(Headers headers, String... allowedRoles) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
@@ -295,6 +365,18 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves merchants visible to the current user, optionally filtered by a search query.
+     * <p>
+     * Merchant users can only see their own merchant record, while other roles can see all merchants.
+     * When a non-blank query is provided, the results are filtered by merchant ID, name, email, or
+     * account status.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param query the query parameters used for filtering results
+     * @return a list of merchant records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listMerchants(Headers headers, Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
@@ -325,6 +407,16 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves a merchant record by merchant ID and includes its current account warnings.
+     * <p>
+     * Merchant users may only access their own merchant account; other roles may access any merchant.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param merchantId the merchant identifier to look up
+     * @return a map containing the merchant details and warnings
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> getMerchant(Headers headers, String merchantId) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
@@ -337,6 +429,16 @@ final class Database {
         }
     }
 
+    /**
+     * Creates a new merchant account and its associated merchant user in a single transaction.
+     * <p>
+     * The merchant record is inserted first, followed by a linked user account with the MERCHANT role.
+     * If either insert fails, the transaction is rolled back so no partial data is persisted.
+     *
+     * @param body a map containing the merchant and user details to create
+     * @return a map containing a success message and the created merchant ID
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> createMerchant(Map<String, Object> body) throws SQLException {
         String merchantId = JsonUtil.requireString(body, "merchantId");
         String username = JsonUtil.requireString(body, "username");
@@ -388,6 +490,17 @@ final class Database {
         return Map.of("message", "Merchant created", "merchantId", merchantId);
     }
 
+    /**
+     * Updates an existing merchant record identified by merchant ID.
+     * <p>
+     * Only the provided fields are changed; omitted fields keep their current values.
+     * If the request includes discount plan fields, the merchant's discount plan is updated as well.
+     *
+     * @param merchantId the merchant identifier to update
+     * @param body a map containing the fields to update
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> updateMerchant(String merchantId, Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -417,6 +530,16 @@ final class Database {
         return Map.of("message", "Merchant updated");
     }
 
+    /**
+     * Deletes a merchant record and its associated user account in a single transaction.
+     * <p>
+     * If the merchant does not exist, the transaction is rolled back and an exception is thrown.
+     * Related data that depends on the merchant may also be removed through database cascades.
+     *
+     * @param merchantId the merchant identifier to delete
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> deleteMerchant(String merchantId) throws SQLException {
         try (Connection connection = connect()) {
             connection.setAutoCommit(false);
@@ -442,6 +565,17 @@ final class Database {
         return Map.of("message", "Merchant deleted with cascaded orders/invoices/payments");
     }
 
+    /**
+     * Retrieves the current balance and account status for a merchant.
+     * <p>
+     * Merchant users may only view their own balance. The returned result also includes any current
+     * account warnings derived from the merchant's payment status.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param merchantId the merchant identifier whose balance should be retrieved
+     * @return a map containing the merchant ID, balance, account status, and warnings
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> getMerchantBalance(Headers headers, String merchantId) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("SELECT balance, account_status FROM merchants WHERE merchant_id = ?")) {
@@ -464,6 +598,17 @@ final class Database {
         }
     }
 
+    /**
+     * Updates the discount plan settings for a merchant.
+     * <p>
+     * The discount type must be either FIXED or FLEXIBLE. The related discount rate values are stored
+     * alongside the plan and the merchant's modification timestamp is refreshed.
+     *
+     * @param merchantId the merchant identifier whose discount plan should be updated
+     * @param body a map containing the discount plan fields
+     * @return a map containing a success message and the applied discount type
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> updateDiscountPlan(String merchantId, Map<String, Object> body) throws SQLException {
         String type = JsonUtil.requireUpper(body, "discountType");
         if (!List.of("FIXED", "FLEXIBLE").contains(type)) {
@@ -490,6 +635,16 @@ final class Database {
         return Map.of("message", "Discount plan updated", "discountType", type);
     }
 
+    /**
+     * Removes the discount plan from a merchant.
+     * <p>
+     * This clears the discount type, resets the fixed discount rate to zero, and updates the merchant's
+     * modification timestamp.
+     *
+     * @param merchantId the merchant identifier whose discount plan should be removed
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> deleteDiscountPlan(String merchantId) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -506,6 +661,17 @@ final class Database {
         return Map.of("message", "Discount plan removed");
     }
 
+    /**
+     * Restores a merchant's account status after the required approval check.
+     * <p>
+     * A director approval flag must be present and true. The new account status must be either NORMAL
+     * or SUSPENDED. If the merchant does not exist, an exception is thrown.
+     *
+     * @param merchantId the merchant identifier whose status should be restored
+     * @param body a map containing the approval flag and the new status
+     * @return a map containing a success message and the applied status
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> restoreMerchant(String merchantId, Map<String, Object> body) throws SQLException {
         if (!JsonUtil.requireBoolean(body, "directorApproved")) {
             throw new ApiException(400, "Director approval is required");
@@ -530,12 +696,31 @@ final class Database {
         return Map.of("message", "Merchant restored", "newStatus", newStatus);
     }
 
+    /**
+     * Evaluates the current account status of a merchant based on overdue invoices.
+     * <p>
+     * The merchant's invoices are inspected to determine the maximum number of overdue days, and the
+     * account status is updated accordingly. Any resulting warnings are returned with the evaluation.
+     *
+     * @param merchantId the merchant identifier to evaluate
+     * @return a map containing the merchant ID, computed account status, warnings, and maximum overdue days
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> evaluateMerchantAccount(String merchantId) throws SQLException {
         try (Connection connection = connect()) {
             return evaluateMerchantAccount(connection, merchantId);
         }
     }
 
+    /**
+     * Retrieves all products from the database ordered by product ID.
+     * <p>
+     * The returned list contains one map per product, with the selected product fields converted into
+     * a JSON-friendly structure.
+     *
+     * @return a list of product records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listProducts() throws SQLException {
         try (Connection connection = connect();
              Statement statement = connection.createStatement();
@@ -544,6 +729,16 @@ final class Database {
         }
     }
 
+    /**
+     * Searches for products whose name or product ID matches the supplied query.
+     * <p>
+     * The search is case-insensitive for product names and returns matching products ordered by
+     * product ID.
+     *
+     * @param query the search text to match against product names and IDs
+     * @return a list of matching product records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> searchProducts(String query) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -561,12 +756,31 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves a single product by its product ID.
+     * <p>
+     * The product is loaded from the database and returned as a JSON-friendly map.
+     * If no product exists for the given ID, an exception is thrown.
+     *
+     * @param productId the product identifier to look up
+     * @return a map containing the product details
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> getProduct(String productId) throws SQLException {
         try (Connection connection = connect()) {
             return getProductById(connection, productId);
         }
     }
 
+    /**
+     * Creates a new product record in the database.
+     * <p>
+     * The product is inserted with the provided identifier, name, pricing, stock levels, and timestamps.
+     *
+     * @param body a map containing the product data to persist
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> createProduct(Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -586,6 +800,17 @@ final class Database {
         return Map.of("message", "Product created");
     }
 
+    /**
+     * Updates an existing product record identified by product ID.
+     * <p>
+     * Only the fields present in the request body are changed; omitted fields keep their current values.
+     * If no matching product exists, an exception is thrown.
+     *
+     * @param productId the product identifier to update
+     * @param body a map containing the fields to update
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> updateProduct(String productId, Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -610,6 +835,15 @@ final class Database {
         return Map.of("message", "Product updated");
     }
 
+    /**
+     * Deletes a product record identified by product ID.
+     * <p>
+     * If no matching product exists, an exception is thrown.
+     *
+     * @param productId the product identifier to delete
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> deleteProduct(String productId) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("DELETE FROM products WHERE product_id = ?")) {
@@ -621,6 +855,17 @@ final class Database {
         return Map.of("message", "Product deleted");
     }
 
+    /**
+     * Increases the stock level for a product and records the stock movement.
+     * <p>
+     * The supplied quantity must be greater than zero. The product stock is updated in a transaction and
+     * a corresponding stock movement entry is created to reflect the restock.
+     *
+     * @param productId the product identifier whose stock should be increased
+     * @param body a map containing the restock quantity and optional reference
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> addStock(String productId, Map<String, Object> body) throws SQLException {
         int quantity = JsonUtil.requireInt(body, "quantity");
         if (quantity <= 0) {
@@ -650,6 +895,17 @@ final class Database {
         return Map.of("message", "Stock increased");
     }
 
+    /**
+     * Updates the minimum stock threshold for a product.
+     * <p>
+     * The supplied minimum stock level must be non-negative. If no matching product exists, an exception
+     * is thrown.
+     *
+     * @param productId the product identifier whose minimum stock level should be updated
+     * @param body a map containing the new minimum stock level
+     * @return a map containing a success message
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> updateMinimumStock(String productId, Map<String, Object> body) throws SQLException {
         int minimumStock = JsonUtil.requireInt(body, "minimumStockLevel");
         if (minimumStock < 0) {
@@ -669,6 +925,19 @@ final class Database {
         return Map.of("message", "Minimum stock level updated");
     }
 
+    /**
+     * Creates a new order for the authenticated merchant and generates an invoice for it.
+     * <p>
+     * The merchant may only place orders for their own account. Each requested item must have a positive
+     * quantity and sufficient stock, and the merchant account must be in a valid state to place orders.
+     * The order, order items, stock changes, merchant balance update, and invoice generation are handled
+     * in a single transaction.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param body a map containing the merchant ID and order items
+     * @return a map containing a success message, order ID, generated invoice, and total amount
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> createOrder(Headers headers, Map<String, Object> body) throws SQLException {
         String merchantId = JsonUtil.requireString(body, "merchantId");
         List<Object> requestedItems = JsonUtil.requireArray(body, "items");
@@ -775,6 +1044,17 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves orders visible to the current user, optionally filtered by merchant ID, order ID, and status.
+     * <p>
+     * Merchant users can only see their own orders. Each returned order includes its associated items and
+     * the results are ordered by most recent order first.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param query the query parameters used to filter the order list
+     * @return a list of order records with their items
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listOrders(Headers headers, Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
@@ -812,6 +1092,16 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves a single order by ID and includes its line items.
+     * <p>
+     * Merchant users can only view their own orders. If the order does not exist, an exception is thrown.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param orderId the order identifier to look up
+     * @return a map containing the order details and its items
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> getOrder(Headers headers, long orderId) throws SQLException {
         try (Connection connection = connect()) {
             Map<String, Object> order = getOrderById(connection, orderId);
@@ -824,6 +1114,14 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves all orders that are not yet delivered or cancelled.
+     * <p>
+     * The results are returned in descending order by order ID.
+     *
+     * @return a list of pending order records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listPendingOrders() throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -834,6 +1132,17 @@ final class Database {
         }
     }
 
+    /**
+     * Updates the status of an existing order.
+     * <p>
+     * Only valid status transitions are allowed. When dispatching an order, courier and tracking details
+     * are required; when delivering an order, the delivered date is recorded automatically.
+     *
+     * @param orderId the order identifier to update
+     * @param body a map containing the new status and any related dispatch details
+     * @return a map containing a success message and the updated status
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> updateOrderStatus(long orderId, Map<String, Object> body) throws SQLException {
         String newStatus = JsonUtil.requireUpper(body, "status");
         if (!List.of("ACCEPTED", "PROCESSING", "DISPATCHED", "DELIVERED").contains(newStatus)) {
@@ -875,12 +1184,32 @@ final class Database {
         return Map.of("message", "Order status updated", "status", newStatus);
     }
 
+    /**
+     * Generates or retrieves the invoice associated with a given order.
+     * <p>
+     * If an invoice already exists for the order, it is returned as-is; otherwise, a new invoice is created
+     * using the order's total amount and merchant information.
+     *
+     * @param orderId the order identifier for which to generate an invoice
+     * @return a map containing the invoice details
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> generateInvoice(long orderId) throws SQLException {
         try (Connection connection = connect()) {
             return generateInvoice(connection, orderId);
         }
     }
 
+    /**
+     * Retrieves invoices visible to the current user, optionally filtered by merchant ID and issue date range.
+     * <p>
+     * Merchant users can only see their own invoices. Results are returned in descending order by invoice ID.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param query the query parameters used to filter the invoice list
+     * @return a list of invoice records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listInvoices(Headers headers, Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
@@ -914,6 +1243,17 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves a single invoice by ID and includes its related order and printable text.
+     * <p>
+     * Merchant users can only view invoices belonging to their own merchant account. If the invoice does
+     * not exist, an exception is thrown.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @param invoiceId the invoice identifier to look up
+     * @return a map containing the invoice details, related order, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> getInvoice(Headers headers, long invoiceId) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("SELECT * FROM invoices WHERE invoice_id = ?")) {
@@ -934,6 +1274,15 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves payments from the database, optionally filtered by merchant ID.
+     * <p>
+     * Results are returned in descending order by payment ID.
+     *
+     * @param query the query parameters used to filter the payment list
+     * @return a list of payment records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listPayments(Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
             String sql = query.containsKey("merchantId")
@@ -950,6 +1299,17 @@ final class Database {
         }
     }
 
+    /**
+     * Records a payment for a merchant and applies it to outstanding invoices.
+     * <p>
+     * The payment amount must be greater than zero, and the payment method must be one of the supported
+     * values. The payment is stored in a transaction, then applied to invoices and used to refresh the
+     * merchant's balance and account evaluation.
+     *
+     * @param body a map containing the payment details
+     * @return a map containing a success message, payment ID, and account evaluation
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> recordPayment(Map<String, Object> body) throws SQLException {
         String merchantId = JsonUtil.requireString(body, "merchantId");
         double amount = JsonUtil.requireDouble(body, "amount");
@@ -995,6 +1355,16 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a turnover report for products sold within the requested date range.
+     * <p>
+     * The report aggregates sold quantity and revenue per product and returns both structured data and a
+     * printable text representation.
+     *
+     * @param query the query parameters containing the required date range
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> turnoverReport(Map<String, String> query) throws SQLException {
         Range range = requiredRange(query);
         try (Connection connection = connect();
@@ -1016,6 +1386,16 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a stock turnover report for the requested date range.
+     * <p>
+     * The report aggregates sold and received quantities per product from stock movement records and
+     * returns both structured data and a printable text representation.
+     *
+     * @param query the query parameters containing the required date range
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> stockTurnoverReport(Map<String, String> query) throws SQLException {
         Range range = requiredRange(query);
         try (Connection connection = connect();
@@ -1038,6 +1418,14 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a low stock report for products currently below their minimum stock level.
+     * <p>
+     * The report includes structured data and a printable text representation of the low stock items.
+     *
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> lowStockReport() throws SQLException {
         try (Connection connection = connect()) {
             List<Map<String, Object>> data = lowStockRows(connection);
@@ -1045,6 +1433,15 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a debtor reminders report for merchants with overdue invoices.
+     * <p>
+     * The report lists merchants with unpaid invoices that are past due, sorted by the most overdue
+     * accounts first, and returns both structured data and a printable text representation.
+     *
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> debtorRemindersReport() throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
@@ -1072,6 +1469,16 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a merchant orders report for a specific merchant and date range.
+     * <p>
+     * The report includes order totals and payment status, and returns both structured data and a
+     * printable text representation.
+     *
+     * @param query the query parameters containing the merchant ID and required date range
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> merchantOrdersReport(Map<String, String> query) throws SQLException {
         String merchantId = requireQuery(query, "merchantId");
         Range range = requiredRange(query);
@@ -1094,6 +1501,16 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a detailed activity report for a specific merchant over a date range.
+     * <p>
+     * The report includes the merchant's orders and each order's items, and returns both structured data
+     * and a printable text representation.
+     *
+     * @param query the query parameters containing the merchant ID and required date range
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> merchantActivityReport(Map<String, String> query) throws SQLException {
         String merchantId = requireQuery(query, "merchantId");
         Range range = requiredRange(query);
@@ -1119,6 +1536,16 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a merchant invoices report for a specific merchant and date range.
+     * <p>
+     * The report lists invoices issued to the merchant and returns both structured data and a printable
+     * text representation.
+     *
+     * @param query the query parameters containing the merchant ID and required date range
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> merchantInvoicesReport(Map<String, String> query) throws SQLException {
         String merchantId = requireQuery(query, "merchantId");
         Range range = requiredRange(query);
@@ -1138,6 +1565,16 @@ final class Database {
         }
     }
 
+    /**
+     * Generates a company-wide invoices report for the requested date range.
+     * <p>
+     * The report lists all invoices issued during the range and returns both structured data and a
+     * printable text representation.
+     *
+     * @param query the query parameters containing the required date range
+     * @return a map containing the report title, generated timestamp, report data, and printable text
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> companyInvoicesReport(Map<String, String> query) throws SQLException {
         Range range = requiredRange(query);
         try (Connection connection = connect();
@@ -1155,6 +1592,16 @@ final class Database {
         }
     }
 
+    /**
+     * Creates a new non-commercial application request.
+     * <p>
+     * The application is stored with a pending status and the current timestamp, and the generated
+     * application ID is returned to the caller.
+     *
+     * @param body a map containing the applicant email
+     * @return a map containing a success message and the generated application ID
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> createNonCommercialApplication(Map<String, Object> body) throws SQLException {
         long applicationId;
         try (Connection connection = connect();
@@ -1173,6 +1620,15 @@ final class Database {
         return Map.of("message", "Application received", "applicationId", applicationId);
     }
 
+    /**
+     * Retrieves all non-commercial applications ordered by most recent first.
+     * <p>
+     * The returned list contains one map per application, with the selected fields converted into a
+     * JSON-friendly structure.
+     *
+     * @return a list of non-commercial application records
+     * @throws SQLException if a database access error occurs
+     */
     List<Map<String, Object>> listApplications() throws SQLException {
         try (Connection connection = connect();
              Statement statement = connection.createStatement();
@@ -1181,6 +1637,18 @@ final class Database {
         }
     }
 
+    /**
+     * Processes a non-commercial application decision and logs the outcome by email.
+     * <p>
+     * The application is marked as approved or rejected based on the supplied decision. When approved,
+     * a temporary password is generated and stored; when rejected, only the status and outcome message
+     * are updated. A notification email is logged for the applicant in either case.
+     *
+     * @param applicationId the application identifier to process
+     * @param body a map containing the approval decision
+     * @return a map containing a success message and an email logging flag
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> decideApplication(long applicationId, Map<String, Object> body) throws SQLException {
         boolean approved = JsonUtil.requireBoolean(body, "approved");
         try (Connection connection = connect()) {
@@ -1224,6 +1692,14 @@ final class Database {
         }
     }
 
+    /**
+     * Seeds the database with default users, merchant records, and products when the tables are empty.
+     * <p>
+     * This method is intended to run during application startup so the system has a basic working dataset
+     * available for login, browsing, and testing.
+     *
+     * @throws SQLException if a database access error occurs while seeding data
+     */
     private void seed() throws SQLException {
         try (Connection connection = connect()) {
             if (count(connection, "users") == 0) {
@@ -1266,6 +1742,16 @@ final class Database {
         }
     }
 
+    /**
+     * Evaluates the current account status of a merchant based on overdue invoices.
+     * <p>
+     * The merchant's invoices are inspected to determine the maximum number of overdue days, and the
+     * account status is updated accordingly. Any resulting warnings are returned with the evaluation.
+     *
+     * @param merchantId the merchant identifier to evaluate
+     * @return a map containing the merchant ID, computed account status, warnings, and maximum overdue days
+     * @throws SQLException if a database access error occurs
+     */
     private Map<String, Object> evaluateMerchantAccount(Connection connection, String merchantId) throws SQLException {
         Map<String, Object> merchant = getMerchantById(connection, merchantId);
         LocalDate today = LocalDate.now();
@@ -1313,6 +1799,17 @@ final class Database {
         return Map.of("merchantId", merchantId, "accountStatus", newStatus, "warnings", warnings, "maxOverdueDays", maxOverdueDays);
     }
 
+    /**
+     * Generates or retrieves the invoice for a given order using an existing database connection.
+     * <p>
+     * If an invoice already exists for the order, it is returned as-is; otherwise, a new invoice is created
+     * from the order's merchant and total amount, then returned from the database.
+     *
+     * @param connection the active database connection to use
+     * @param orderId the order identifier for which to generate an invoice
+     * @return a map containing the invoice details
+     * @throws SQLException if a database access error occurs
+     */
     private Map<String, Object> generateInvoice(Connection connection, long orderId) throws SQLException {
         try (PreparedStatement existing = connection.prepareStatement("SELECT * FROM invoices WHERE order_id = ?")) {
             existing.setLong(1, orderId);
@@ -1349,6 +1846,17 @@ final class Database {
         }
     }
 
+    /**
+     * Applies a payment amount across a merchant's outstanding invoices in due-date order.
+     * <p>
+     * Each invoice is partially or fully paid until the payment amount is exhausted, and invoice status
+     * is updated to reflect the remaining balance.
+     *
+     * @param connection the active database connection to use
+     * @param merchantId the merchant identifier whose invoices should receive the payment
+     * @param amount the payment amount to apply
+     * @throws SQLException if a database access error occurs
+     */
     private void applyPaymentToInvoices(Connection connection, String merchantId, double amount) throws SQLException {
         double remaining = amount;
         try (PreparedStatement ps = connection.prepareStatement("""
@@ -1385,6 +1893,16 @@ final class Database {
         }
     }
 
+    /**
+     * Recalculates and updates a merchant's outstanding balance.
+     * <p>
+     * The balance is derived from all unpaid invoices for the merchant and written back to the merchants
+     * table together with an updated timestamp.
+     *
+     * @param connection the active database connection to use
+     * @param merchantId the merchant identifier whose balance should be updated
+     * @throws SQLException if a database access error occurs
+     */
     private void updateMerchantBalance(Connection connection, String merchantId) throws SQLException {
         double balance;
         try (PreparedStatement ps = connection.prepareStatement("""
@@ -1407,6 +1925,17 @@ final class Database {
         }
     }
 
+    /**
+     * Calculates the discount amount for a merchant based on the configured discount plan.
+     * <p>
+     * If the merchant uses a fixed discount plan, the returned value includes both any pending discount
+     * credit and the percentage-based discount on the provided subtotal. Otherwise, only pending discount
+     * credit is applied.
+     *
+     * @param merchant the merchant data containing discount configuration
+     * @param subtotal the order subtotal to use when calculating the discount
+     * @return the calculated discount amount
+     */
     private double calculateDiscount(Map<String, Object> merchant, double subtotal) {
         double pendingCredit = ((Number) merchant.get("pending_discount_credit")).doubleValue();
         String discountType = Objects.toString(merchant.get("discount_type"), null);
@@ -1416,6 +1945,20 @@ final class Database {
         return pendingCredit;
     }
 
+    /**
+     * Inserts a stock movement record for a product.
+     * <p>
+     * The movement captures the product, movement type, quantity, timestamp, and any optional reference
+     * information.
+     *
+     * @param connection the active database connection to use
+     * @param productId the product identifier associated with the movement
+     * @param type the movement type to record
+     * @param quantity the quantity moved
+     * @param referenceType the optional reference type for the movement
+     * @param referenceId the optional reference identifier for the movement
+     * @throws SQLException if a database access error occurs
+     */
     private void insertStockMovement(Connection connection, String productId, String type, int quantity, String referenceType, String referenceId) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
                 INSERT INTO stock_movements (product_id, movement_type, quantity, happened_at, reference_type, reference_id)
@@ -1431,6 +1974,17 @@ final class Database {
         }
     }
 
+    /**
+     * Logs an email that would be sent by the system.
+     * <p>
+     * The message is stored with a simulated SMTP delivery mode and the current timestamp.
+     *
+     * @param connection the active database connection to use
+     * @param recipient the email recipient address
+     * @param subject the email subject line
+     * @param body the email body content
+     * @throws SQLException if a database access error occurs
+     */
     private void logEmail(Connection connection, String recipient, String subject, String body) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
                 INSERT INTO email_log (recipient, subject, body, sent_at, delivery_mode)
@@ -1444,6 +1998,16 @@ final class Database {
         }
     }
 
+    /**
+     * Builds a printable text version of the turnover report.
+     * <p>
+     * The output includes the report period followed by a line for each product showing the product ID,
+     * name, quantity sold, and revenue.
+     *
+     * @param range the date range covered by the report
+     * @param rows the report rows to include in the printable output
+     * @return a formatted printable turnover report
+     */
     private String printableTurnover(Range range, List<Map<String, Object>> rows) {
         StringBuilder builder = new StringBuilder("Turnover Report\nPeriod: ").append(range.start).append(" to ").append(range.end).append("\n\n");
         for (Map<String, Object> row : rows) {
@@ -1452,6 +2016,16 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Builds a printable text version of the stock turnover report.
+     * <p>
+     * The output includes the report period followed by a line for each product showing the product ID,
+     * sold quantity, and received quantity.
+     *
+     * @param range the date range covered by the report
+     * @param rows the report rows to include in the printable output
+     * @return a formatted printable stock turnover report
+     */
     private String printableStockTurnover(Range range, List<Map<String, Object>> rows) {
         StringBuilder builder = new StringBuilder("Stock Turnover Report\nPeriod: ").append(range.start).append(" to ").append(range.end).append("\n\n");
         for (Map<String, Object> row : rows) {
@@ -1460,6 +2034,15 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Builds a printable text version of the low stock report.
+     * <p>
+     * The output lists each low stock product with its product ID, name, current stock, minimum stock,
+     * and recommended order quantity.
+     *
+     * @param rows the report rows to include in the printable output
+     * @return a formatted printable low stock report
+     */
     private String printableLowStock(List<Map<String, Object>> rows) {
         StringBuilder builder = new StringBuilder("Low Stock Report\n\n");
         for (Map<String, Object> row : rows) {
@@ -1468,6 +2051,17 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Builds a printable text version of the merchant orders report.
+     * <p>
+     * The output includes the merchant and report period followed by one line per order with its order date,
+     * total amount, dispatch date, and payment status.
+     *
+     * @param merchantId the merchant identifier for the report header
+     * @param range the date range covered by the report
+     * @param rows the report rows to include in the printable output
+     * @return a formatted printable merchant orders report
+     */
     private String printableMerchantOrders(String merchantId, Range range, List<Map<String, Object>> rows) {
         StringBuilder builder = new StringBuilder("Merchant Orders Report\nMerchant: ").append(merchantId).append("\nPeriod: ").append(range.start).append(" to ").append(range.end).append("\n\n");
         for (Map<String, Object> row : rows) {
@@ -1476,6 +2070,16 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Builds a printable text version of the merchant activity report.
+     * <p>
+     * The output includes the merchant and date range, then lists each order followed by its line items.
+     *
+     * @param merchantId the merchant identifier for the report header
+     * @param range the date range covered by the report
+     * @param rows the report rows to include in the printable output
+     * @return a formatted printable merchant activity report
+     */
     private String printableMerchantActivity(String merchantId, Range range, List<Map<String, Object>> rows) {
         StringBuilder builder = new StringBuilder("Merchant Activity Report\nMerchant: ").append(merchantId).append("\nPeriod: ").append(range.start).append(" to ").append(range.end).append("\n\n");
         for (Map<String, Object> row : rows) {
@@ -1489,6 +2093,17 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Builds a printable text version of the merchant invoices report.
+     * <p>
+     * The output includes the merchant and date range, then lists each invoice with its order, total,
+     * paid amount, and status.
+     *
+     * @param merchantId the merchant identifier for the report header
+     * @param range the date range covered by the report
+     * @param rows the report rows to include in the printable output
+     * @return a formatted printable merchant invoices report
+     */
     private String printableMerchantInvoices(String merchantId, Range range, List<Map<String, Object>> rows) {
         StringBuilder builder = new StringBuilder("Merchant Invoices Report\nMerchant: ").append(merchantId).append("\nPeriod: ").append(range.start).append(" to ").append(range.end).append("\n\n");
         for (Map<String, Object> row : rows) {
@@ -1497,6 +2112,16 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Builds a printable text version of the company invoices report.
+     * <p>
+     * The output includes the report period and lists each invoice with its merchant, total, paid amount,
+     * and status.
+     *
+     * @param range the date range covered by the report
+     * @param rows the report rows to include in the printable output
+     * @return a formatted printable company invoices report
+     */
     private String printableCompanyInvoices(Range range, List<Map<String, Object>> rows) {
         StringBuilder builder = new StringBuilder("Company Invoices Report\nPeriod: ").append(range.start).append(" to ").append(range.end).append("\n\n");
         for (Map<String, Object> row : rows) {
@@ -1505,10 +2130,31 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Creates a standard report payload.
+     * <p>
+     * The returned map includes the report title, generation timestamp, underlying data, and printable
+     * text representation.
+     *
+     * @param title the report title
+     * @param data the structured report data
+     * @param printableText the printable text representation of the report
+     * @return a map containing the report metadata and content
+     */
     private Map<String, Object> report(String title, Object data, String printableText) {
         return Map.of("title", title, "generatedAt", now(), "data", data, "printableText", printableText);
     }
 
+    /**
+     * Retrieves the products that are currently below their minimum stock level.
+     * <p>
+     * Each row includes the recommended minimum order quantity needed to bring stock back above the
+     * threshold.
+     *
+     * @param connection the active database connection to use
+     * @return a list of low stock product records
+     * @throws SQLException if a database access error occurs
+     */
     private List<Map<String, Object>> lowStockRows(Connection connection) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
                 SELECT product_id, name, stock_level, minimum_stock_level,
@@ -1522,6 +2168,16 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves a merchant record by merchant ID.
+     * <p>
+     * If no matching merchant exists, an exception is thrown.
+     *
+     * @param connection the active database connection to use
+     * @param merchantId the merchant identifier to look up
+     * @return a map containing the merchant details
+     * @throws SQLException if a database access error occurs
+     */
     private Map<String, Object> getMerchantById(Connection connection, String merchantId) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("SELECT * FROM merchants WHERE merchant_id = ?")) {
             ps.setString(1, merchantId);
@@ -1534,6 +2190,16 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves a product record by product ID.
+     * <p>
+     * If no matching product exists, an exception is thrown.
+     *
+     * @param connection the active database connection to use
+     * @param productId the product identifier to look up
+     * @return a map containing the product details
+     * @throws SQLException if a database access error occurs
+     */
     private Map<String, Object> getProductById(Connection connection, String productId) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("SELECT * FROM products WHERE product_id = ?")) {
             ps.setString(1, productId);
@@ -1546,6 +2212,16 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves an order record by order ID.
+     * <p>
+     * If no matching order exists, an exception is thrown.
+     *
+     * @param connection the active database connection to use
+     * @param orderId the order identifier to look up
+     * @return a map containing the order details
+     * @throws SQLException if a database access error occurs
+     */
     private Map<String, Object> getOrderById(Connection connection, long orderId) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("SELECT * FROM orders WHERE order_id = ?")) {
             ps.setLong(1, orderId);
@@ -1558,6 +2234,16 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves the line items for an order.
+     * <p>
+     * The returned items are ordered by their insertion order in the database.
+     *
+     * @param connection the active database connection to use
+     * @param orderId the order identifier whose items should be retrieved
+     * @return a list of order item records
+     * @throws SQLException if a database access error occurs
+     */
     private List<Map<String, Object>> getOrderItems(Connection connection, long orderId) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("SELECT * FROM order_items WHERE order_id = ? ORDER BY order_item_id")) {
             ps.setLong(1, orderId);
@@ -1567,6 +2253,17 @@ final class Database {
         }
     }
 
+    /**
+     * Builds a printable text representation of an invoice.
+     * <p>
+     * The output includes the invoice identifier, each order item with quantity, unit price, and line
+     * total, followed by the total amount due.
+     *
+     * @param connection the active database connection to use
+     * @param invoice the invoice data used to build the printable text
+     * @return a formatted printable invoice
+     * @throws SQLException if a database access error occurs
+     */
     private String invoicePrintableText(Connection connection, Map<String, Object> invoice) throws SQLException {
         List<Map<String, Object>> items = getOrderItems(connection, ((Number) invoice.get("order_id")).longValue());
         StringBuilder builder = new StringBuilder();
@@ -1578,6 +2275,19 @@ final class Database {
         return builder.toString();
     }
 
+    /**
+     * Inserts a single product record used during database seeding.
+     * <p>
+     * The product is stored with its identifier, name, pricing, stock levels, and timestamps.
+     *
+     * @param connection the active database connection to use
+     * @param id the product identifier
+     * @param name the product name
+     * @param price the unit price
+     * @param stock the initial stock level
+     * @param minimumStock the minimum stock threshold
+     * @throws SQLException if a database access error occurs
+     */
     private void seedProduct(Connection connection, String id, String name, double price, int stock, int minimumStock) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
                 INSERT INTO products (product_id, name, unit_price, stock_level, minimum_stock_level, created_at, updated_at)
@@ -1595,6 +2305,19 @@ final class Database {
         }
     }
 
+    /**
+     * Inserts a single user record used during database seeding.
+     * <p>
+     * The user is stored with its credentials, role, optional merchant association, active flag, and
+     * creation timestamp.
+     *
+     * @param connection the active database connection to use
+     * @param username the username to insert
+     * @param password the password to insert
+     * @param role the user role to insert
+     * @param merchantId the optional merchant identifier associated with the user
+     * @throws SQLException if a database access error occurs
+     */
     private void insertUser(Connection connection, String username, String password, String role, String merchantId) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
                 INSERT INTO users (username, password, role, merchant_id, active, created_at)
@@ -1609,6 +2332,16 @@ final class Database {
         }
     }
 
+    /**
+     * Counts the number of rows in a database table.
+     * <p>
+     * The table name is used directly in the SQL query, so it should only be supplied from trusted code.
+     *
+     * @param connection the active database connection to use
+     * @param table the table name to count rows from
+     * @return the number of rows in the table
+     * @throws SQLException if a database access error occurs
+     */
     private int count(Connection connection, String table) throws SQLException {
         try (Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
@@ -1616,6 +2349,15 @@ final class Database {
         }
     }
 
+    /**
+     * Opens a SQLite database connection and enables foreign key enforcement.
+     * <p>
+     * The returned connection is configured for this application’s schema rules before being handed back
+     * to the caller.
+     *
+     * @return an open database connection
+     * @throws SQLException if the connection cannot be established or configured
+     */
     private Connection connect() throws SQLException {
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
         try (Statement statement = connection.createStatement()) {
@@ -1624,6 +2366,17 @@ final class Database {
         return connection;
     }
 
+    /**
+     * Resolves the authenticated user from the session token stored in the request headers.
+     * <p>
+     * The token must be present in the {@code X-Session-Token} header, must match an active session, and
+     * the associated user account must be active.
+     *
+     * @param connection the active database connection to use
+     * @param headers the HTTP headers containing the session token
+     * @return the resolved authentication context
+     * @throws SQLException if a database access error occurs
+     */
     private AuthContext resolveAuth(Connection connection, Headers headers) throws SQLException {
         String sessionToken = headers.getFirst("X-Session-Token");
         if (sessionToken == null || sessionToken.isBlank()) {
@@ -1648,6 +2401,16 @@ final class Database {
         }
     }
 
+    /**
+     * Determines whether an order can transition from its current status to a new status.
+     * <p>
+     * The allowed flow is ACCEPTED → PROCESSING → DISPATCHED → DELIVERED. A status may also remain
+     * unchanged.
+     *
+     * @param currentStatus the order's current status
+     * @param newStatus the desired new status
+     * @return {@code true} if the transition is allowed; otherwise {@code false}
+     */
     private static boolean isValidOrderTransition(String currentStatus, String newStatus) {
         if (Objects.equals(currentStatus, newStatus)) {
             return true;
@@ -1660,6 +2423,15 @@ final class Database {
         };
     }
 
+    /**
+     * Extracts a required query parameter from a map.
+     * <p>
+     * The value must be present and non-blank; otherwise an exception is thrown.
+     *
+     * @param query the query parameter map
+     * @param key the parameter name to look up
+     * @return the non-blank parameter value
+     */
     private static String requireQuery(Map<String, String> query, String key) {
         String value = query.get(key);
         if (value == null || value.isBlank()) {
@@ -1668,14 +2440,36 @@ final class Database {
         return value;
     }
 
+    /**
+     * Parses a required date range from query parameters.
+     * <p>
+     * Both {@code start} and {@code end} must be present and valid ISO-8601 dates.
+     *
+     * @param query the query parameter map
+     * @return the parsed date range
+     * @throws ApiException if either date parameter is missing
+     */
     private static Range requiredRange(Map<String, String> query) {
         return new Range(LocalDate.parse(requireQuery(query, "start")), LocalDate.parse(requireQuery(query, "end")));
     }
 
+    /**
+     * Returns the current local date-time as an ISO-8601 string.
+     *
+     * @return the current timestamp in ISO-8601 format
+     */
     private static String now() {
         return LocalDateTime.now().toString();
     }
 
+    /**
+     * Sets a prepared statement parameter, allowing {@code null} values.
+     *
+     * @param ps the prepared statement to update
+     * @param index the 1-based parameter index
+     * @param value the value to set, or {@code null}
+     * @throws SQLException if the parameter cannot be set
+     */
     private static void setNullable(PreparedStatement ps, int index, Object value) throws SQLException {
         if (value == null) {
             ps.setObject(index, null);
@@ -1684,6 +2478,13 @@ final class Database {
         }
     }
 
+    /**
+     * Reads all remaining rows from a result set and converts them into a list of maps.
+     *
+     * @param rs the result set to read
+     * @return a list containing one map per row
+     * @throws SQLException if the result set cannot be read
+     */
     private static List<Map<String, Object>> rows(ResultSet rs) throws SQLException {
         List<Map<String, Object>> rows = new ArrayList<>();
         while (rs.next()) {
@@ -1692,6 +2493,13 @@ final class Database {
         return rows;
     }
 
+    /**
+     * Reads all remaining rows from a result set and converts them into a list of maps.
+     *
+     * @param rs the result set to read
+     * @return a list containing one map per row
+     * @throws SQLException if the result set cannot be read
+     */
     private static Map<String, Object> row(ResultSet rs) throws SQLException {
         Map<String, Object> row = new LinkedHashMap<>();
         int count = rs.getMetaData().getColumnCount();
@@ -1701,6 +2509,12 @@ final class Database {
         return row;
     }
 
+    /**
+     * Normalizes common SQL date and timestamp values into ISO-8601 strings.
+     *
+     * @param value the value to normalize
+     * @return the normalized value, or the original value if no conversion is needed
+     */
     private static Object normalizeSqlValue(Object value) {
         if (value instanceof Timestamp timestamp) {
             return timestamp.toLocalDateTime().toString();

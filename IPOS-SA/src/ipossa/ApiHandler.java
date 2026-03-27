@@ -28,6 +28,8 @@ final class ApiHandler implements HttpHandler {
     }
 
     @Override
+
+
     public void handle(HttpExchange exchange) throws IOException {
         try {
             String path = exchange.getRequestURI().getPath();
@@ -60,6 +62,14 @@ final class ApiHandler implements HttpHandler {
         }
     }
 
+    /**
+     * Routes an API request to the handler responsible for the first path segment.
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the non-empty path segments after the /api/ prefix
+     * @throws Exception if the selected route handler fails
+     */
     private void route(HttpExchange exchange, String method, List<String> parts) throws Exception {
         switch (parts.get(0)) {
             case "auth" -> handleAuth(exchange, method, parts);
@@ -75,6 +85,18 @@ final class ApiHandler implements HttpHandler {
         }
     }
 
+    /**
+     * Processes authentication requests.
+     *
+     * <p>Only {@code POST /api/auth/login} is supported. The request body must contain valid
+     * credentials, which are passed to the database login flow, and the resulting login payload is
+     * returned as JSON.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authentication fails or the request body cannot be parsed
+     */
     private void handleAuth(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (!"POST".equals(method) || parts.size() != 2 || !"login".equals(parts.get(1))) {
             throw new ApiException(404, "Route not found");
@@ -83,6 +105,17 @@ final class ApiHandler implements HttpHandler {
         writeJson(exchange, 200, db.login(JsonUtil.requireString(body, "username"), JsonUtil.requireString(body, "password")));
     }
 
+    /**
+     * Processes user management requests.
+     *
+     * <p>All user operations require administrator access. The handler supports listing users, creating
+     * a user, updating a user by username, and deleting a user by username.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handleUsers(HttpExchange exchange, String method, List<String> parts) throws Exception {
         requireRole(exchange, "ADMINISTRATOR");
         if (parts.size() == 1 && "GET".equals(method)) {
@@ -104,6 +137,18 @@ final class ApiHandler implements HttpHandler {
         throw new ApiException(404, "Route not found");
     }
 
+    /**
+     * Processes merchant-related requests.
+     *
+     * <p>This handler supports listing, creating, retrieving, updating, deleting, restoring merchants,
+     * managing discount plans, evaluating accounts, and retrieving merchant balances. Access control is
+     * enforced per operation based on the caller's role.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handleMerchants(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (parts.size() == 1 && "GET".equals(method)) {
             requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF", "MERCHANT");
@@ -161,6 +206,18 @@ final class ApiHandler implements HttpHandler {
         throw new ApiException(404, "Route not found");
     }
 
+    /**
+     * Processes product-related requests.
+     *
+     * <p>The handler supports listing products, creating products, searching, low-stock reporting,
+     * retrieving a product, updating or deleting a product, and adjusting stock or minimum stock
+     * thresholds. Sensitive actions require elevated roles.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handleProducts(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (parts.size() == 1 && "GET".equals(method)) {
             writeJson(exchange, 200, Map.of("products", db.listProducts()));
@@ -207,6 +264,18 @@ final class ApiHandler implements HttpHandler {
         throw new ApiException(404, "Route not found");
     }
 
+    /**
+     * Processes order-related requests.
+     *
+     * <p>The handler supports listing orders, creating a new order for the current merchant, retrieving
+     * an order, listing pending orders, updating order status, and generating invoices from orders.
+     * Access is restricted according to the caller's role.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handleOrders(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (parts.size() == 1 && "GET".equals(method)) {
             requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF", "MERCHANT");
@@ -241,6 +310,17 @@ final class ApiHandler implements HttpHandler {
         throw new ApiException(404, "Route not found");
     }
 
+    /**
+     * Processes invoice-related requests.
+     *
+     * <p>The handler supports listing invoices and retrieving a single invoice by ID. Merchant users are
+     * limited to invoices belonging to their own merchant account.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handleInvoices(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (parts.size() == 1 && "GET".equals(method)) {
             requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "MERCHANT");
@@ -255,6 +335,17 @@ final class ApiHandler implements HttpHandler {
         throw new ApiException(404, "Route not found");
     }
 
+    /**
+     * Processes payment-related requests.
+     *
+     * <p>The handler supports listing payments and recording a new payment. Payment actions are limited
+     * to authorized accounting or administrative roles.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handlePayments(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (parts.size() == 1 && "GET".equals(method)) {
             requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF");
@@ -269,6 +360,18 @@ final class ApiHandler implements HttpHandler {
         throw new ApiException(404, "Route not found");
     }
 
+    /**
+     * Processes report requests.
+     *
+     * <p>Only authorized staff roles may access reports, and only via {@code GET}. The second path
+     * segment determines which report is generated, such as turnover, stock turnover, low stock, debtor
+     * reminders, merchant activity, or invoice summaries.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handleReports(HttpExchange exchange, String method, List<String> parts) throws Exception {
         requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF");
         if (!"GET".equals(method) || parts.size() != 2) {
@@ -289,6 +392,18 @@ final class ApiHandler implements HttpHandler {
         writeJson(exchange, 200, result);
     }
 
+    /**
+     * Processes non-commercial application requests.
+     *
+     * <p>The handler supports submitting new applications, listing applications for privileged roles,
+     * and recording a decision for a specific application. Decisions may result in a generated password
+     * and an email log entry.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the database operation fails
+     */
     private void handleApplications(HttpExchange exchange, String method, List<String> parts) throws Exception {
         if (parts.size() == 1 && "POST".equals(method)) {
             writeJson(exchange, 201, db.createNonCommercialApplication(body(exchange)));
@@ -307,12 +422,30 @@ final class ApiHandler implements HttpHandler {
         throw new ApiException(404, "Route not found");
     }
 
+    /**
+     * Reads and parses the request body as a JSON object.
+     *
+     * <p>The entire request body is consumed as UTF-8 text and converted into a JSON object map.</p>
+     *
+     * @param exchange the HTTP exchange whose request body should be read
+     * @return the parsed JSON object as a map
+     * @throws IOException if the body cannot be read or parsed
+     */
     private Map<String, Object> body(HttpExchange exchange) throws IOException {
         try (InputStream in = exchange.getRequestBody()) {
             return JsonUtil.asObject(JsonUtil.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8)));
         }
     }
 
+    /**
+     * Parses the raw query string into a map of decoded key-value pairs.
+     *
+     * <p>Blank segments are ignored, keys and values are URL-decoded, and parameters without an explicit
+     * value are mapped to an empty string.</p>
+     *
+     * @param exchange the HTTP exchange whose query string should be parsed
+     * @return a map of decoded query parameters
+     */
     private static Map<String, String> query(HttpExchange exchange) {
         Map<String, String> params = new LinkedHashMap<>();
         URI uri = exchange.getRequestURI();
@@ -329,10 +462,29 @@ final class ApiHandler implements HttpHandler {
         return params;
     }
 
+    /**
+     * Verifies that the current request is authenticated and has one of the allowed roles.
+     *
+     * <p>This is a convenience wrapper around database authorization that enforces role-based access
+     * control before a handler proceeds.</p>
+     *
+     * @param exchange the HTTP exchange containing the current request headers
+     * @param allowedRoles the roles permitted to perform the operation
+     * @throws Exception if authentication fails or the role is not permitted
+     */
     private void requireRole(HttpExchange exchange, String... allowedRoles) throws Exception {
         db.authorize(exchange.getRequestHeaders(), allowedRoles);
     }
 
+    /**
+     * Splits a URL path into non-blank path segments.
+     *
+     * <p>Leading, trailing, and repeated slashes are ignored so the returned list contains only useful
+     * route segments.</p>
+     *
+     * @param path the raw path string to split
+     * @return a list of non-blank path segments
+     */
     private static List<String> splitPath(String path) {
         List<String> parts = new ArrayList<>();
         for (String part : path.split("/")) {
@@ -343,6 +495,17 @@ final class ApiHandler implements HttpHandler {
         return parts;
     }
 
+    /**
+     * Serializes a payload to JSON and writes it to the HTTP response.
+     *
+     * <p>The response is sent with UTF-8 JSON content type, CORS headers, and the provided status code.
+     * The response body is written fully and then closed.</p>
+     *
+     * @param exchange the HTTP exchange to write to
+     * @param statusCode the HTTP status code to send
+     * @param payload the response payload to serialize as JSON
+     * @throws IOException if the response cannot be written
+     */
     private static void writeJson(HttpExchange exchange, int statusCode, Object payload) throws IOException {
         byte[] bytes = JsonUtil.stringify(payload).getBytes(StandardCharsets.UTF_8);
         Headers headers = exchange.getResponseHeaders();
@@ -355,6 +518,17 @@ final class ApiHandler implements HttpHandler {
         }
     }
 
+    /**
+     * Serves a static file from the configured static root.
+     *
+     * <p>The root path is protected against directory traversal. Requests for {@code /} are mapped to
+     * {@code /login.html}. If the requested file does not exist or is a directory, a not found error is
+     * raised.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param path the requested URL path
+     * @throws IOException if the file cannot be read or the response cannot be written
+     */
     private void serveStatic(HttpExchange exchange, String path) throws IOException {
         String requested = path.equals("/") ? "/login.html" : path;
         Path resolved = staticRoot.resolve("." + requested).normalize();
@@ -370,6 +544,15 @@ final class ApiHandler implements HttpHandler {
         }
     }
 
+    /**
+     * Determines the MIME type for a static file based on its extension.
+     *
+     * <p>Common web asset types are mapped explicitly, and all other files fall back to a generic binary
+     * content type.</p>
+     *
+     * @param file the file whose content type should be determined
+     * @return the appropriate content type string
+     */
     private static String contentType(Path file) {
         String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
         if (name.endsWith(".html")) return "text/html; charset=utf-8";
