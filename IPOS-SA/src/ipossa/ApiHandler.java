@@ -98,11 +98,19 @@ final class ApiHandler implements HttpHandler {
      * @throws Exception if authentication fails or the request body cannot be parsed
      */
     private void handleAuth(HttpExchange exchange, String method, List<String> parts) throws Exception {
-        if (!"POST".equals(method) || parts.size() != 2 || !"login".equals(parts.get(1))) {
+        if (parts.size() != 2) {
             throw new ApiException(404, "Route not found");
         }
-        Map<String, Object> body = body(exchange);
-        writeJson(exchange, 200, db.login(JsonUtil.requireString(body, "username"), JsonUtil.requireString(body, "password")));
+        if ("POST".equals(method) && "login".equals(parts.get(1))) {
+            Map<String, Object> body = body(exchange);
+            writeJson(exchange, 200, db.login(JsonUtil.requireString(body, "username"), JsonUtil.requireString(body, "password")));
+            return;
+        }
+        if ("GET".equals(method) && "session".equals(parts.get(1))) {
+            writeJson(exchange, 200, db.getSession(exchange.getRequestHeaders()));
+            return;
+        }
+        throw new ApiException(404, "Route not found");
     }
 
     /**

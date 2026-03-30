@@ -245,6 +245,26 @@ final class Database {
         }
     }
 
+    Map<String, Object> getSession(Headers headers) throws SQLException {
+        try (Connection connection = connect()) {
+            AuthContext auth = resolveAuth(connection, headers);
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("username", auth.username());
+            response.put("role", auth.role());
+            response.put("merchantId", auth.merchantId());
+            response.put("sessionToken", headers.getFirst("X-Session-Token"));
+            if ("MERCHANT".equals(auth.role()) && auth.merchantId() != null) {
+                response.put("merchant", getMerchantById(connection, auth.merchantId()));
+                response.put("warnings", evaluateMerchantAccount(connection, auth.merchantId()).get("warnings"));
+            } else if ("ADMINISTRATOR".equals(auth.role()) || "MANAGER".equals(auth.role())) {
+                response.put("warnings", lowStockRows(connection));
+            } else {
+                response.put("warnings", List.of());
+            }
+            return response;
+        }
+    }
+
     /**
      * Retrieves all users from the database ordered by username.
      * <p>

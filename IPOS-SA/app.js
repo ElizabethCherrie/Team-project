@@ -561,7 +561,28 @@ function setBanner(message, kind) {
   statusBanner.className = `status-banner ${kind}`;
 }
 
-function bootstrap() {
+async function bootstrap() {
+  const params = new URLSearchParams(window.location.search);
+  const handoffToken = params.get("sessionToken");
+  if (handoffToken) {
+    try {
+      const response = await fetch(`${state.apiBase}/auth/session`, {
+        headers: { "X-Session-Token": handoffToken },
+      });
+      const text = await response.text();
+      const session = text ? JSON.parse(text) : {};
+      if (!response.ok) {
+        throw new Error(session.error || `Session bootstrap failed with ${response.status}`);
+      }
+      sessionStorage.setItem("iposSaSession", JSON.stringify(session));
+      state.session = session;
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch (error) {
+      sessionStorage.removeItem("iposSaSession");
+      window.location.href = "login.html";
+      return;
+    }
+  }
   const stored = sessionStorage.getItem("iposSaSession");
   if (!stored) {
     window.location.href = "login.html";

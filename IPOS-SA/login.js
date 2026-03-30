@@ -3,6 +3,7 @@ const statusBanner = document.querySelector("#status-banner");
 const apiBaseInput = document.querySelector("#api-base");
 
 apiBaseInput.value = defaultApiBase();
+bootstrapHandoff();
 
 document.querySelectorAll(".seed-btn").forEach((button) => {
   button.addEventListener("click", () => {
@@ -52,3 +53,35 @@ loginForm.addEventListener("submit", async (event) => {
     statusBanner.className = "status-banner error";
   }
 });
+
+async function bootstrapHandoff() {
+  const params = new URLSearchParams(window.location.search);
+  const sessionToken = params.get("sessionToken");
+  if (!sessionToken) {
+    return;
+  }
+  const apiBase = apiBaseInput.value.trim().replace(/\/$/, "");
+  try {
+    const response = await fetch(`${apiBase}/auth/session`, {
+      headers: { "X-Session-Token": sessionToken },
+    });
+    const text = await response.text();
+    const session = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+      throw new Error(session.error || `Session bootstrap failed with ${response.status}`);
+    }
+    sessionStorage.setItem("iposSaApiBase", apiBase);
+    sessionStorage.setItem("iposSaSession", JSON.stringify(session));
+    const destination = {
+      ADMINISTRATOR: "admin.html",
+      MANAGER: "manager.html",
+      OPERATIONS_STAFF: "operations.html",
+      ACCOUNTING_STAFF: "accounting.html",
+      MERCHANT: "merchant.html",
+    }[session.role] || "dashboard.html";
+    window.location.href = destination;
+  } catch (error) {
+    statusBanner.textContent = error.message;
+    statusBanner.className = "status-banner error";
+  }
+}
