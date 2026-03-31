@@ -1747,41 +1747,119 @@ final class Database {
     private void seed() throws SQLException {
         try (Connection connection = connect()) {
             if (count(connection, "users") == 0) {
-                insertUser(connection, "admin", "admin123", "ADMINISTRATOR", null);
-                insertUser(connection, "manager", "manager123", "MANAGER", null);
-                insertUser(connection, "ops", "ops123", "OPERATIONS_STAFF", null);
-                insertUser(connection, "accounts", "accounts123", "ACCOUNTING_STAFF", null);
-                insertUser(connection, "merchant1", "merchant123", "MERCHANT", "M0001");
+                insertUser(connection, "Sysdba", "London_weighting", "ADMINISTRATOR", null);
+                insertUser(connection, "manager", "Get_it_done", "MANAGER", null);
+                insertUser(connection, "accountant", "Count_money", "ACCOUNTING_STAFF", null);
+                insertUser(connection, "clerk", "Paperwork", "ACCOUNTING_STAFF", null);
+                insertUser(connection, "warehouse1", "Get_a_beer", "OPERATIONS_STAFF", null);
+                insertUser(connection, "warehouse2", "Lot_smell", "OPERATIONS_STAFF", null);
+                insertUser(connection, "delivery", "Too_dark", "OPERATIONS_STAFF", null);
+                insertUser(connection, "city", "northampton", "MERCHANT", "ACC0001");
+                insertUser(connection, "cosymed", "bondstreet", "MERCHANT", "ACC0002");
+                insertUser(connection, "hello", "there", "MERCHANT", "ACC0003");
             }
             if (count(connection, "merchants") == 0) {
-                try (PreparedStatement ps = connection.prepareStatement("""
-                        INSERT INTO merchants (
-                            merchant_id, name, email, address, phone, credit_limit, balance, account_status,
-                            discount_type, fixed_discount_rate, flexible_rate_tier1, flexible_rate_tier2, flexible_rate_tier3,
-                            pending_discount_credit, created_at, updated_at
-                        ) VALUES ('M0001', 'Cosymed Ltd.', 'orders@cosymed.example', '3 High Level Drive, Sydenham, SE26 3ET',
-                                  '02087780124', 10000, 0, 'NORMAL', 'FIXED', 5, 1, 2, 3, 0, ?, ?)
-                        """)) {
-                    ps.setString(1, now());
-                    ps.setString(2, now());
-                    ps.executeUpdate();
-                }
+                insertMerchant(connection, "ACC0001", "CityPharmacy", "citypharmacy@example.com",
+                        "Northampton Square, London EC1V 0HB", "0207 040 8000",
+                        10_000, "FIXED", 3, 0, 1, 2, "2026-02-01T09:00:00");
+                insertMerchant(connection, "ACC0002", "Cosymed Ltd", "cosymed@example.com",
+                        "25, Bond Street, London WC1V 8LS", "0207 321 8001",
+                        5_000, "FLEXIBLE", 0, 0, 1, 2, "2026-02-01T09:05:00");
+                insertMerchant(connection, "ACC0003", "HelloPharmacy", "hello@example.com",
+                        "12, Bond Street, London WC1V 9NS", "0207 321 8002",
+                        5_000, "FLEXIBLE", 0, 0, 1, 3, "2026-02-01T09:10:00");
             }
             if (count(connection, "products") == 0) {
                 seedProduct(connection, "10000001", "Paracetamol", 0.10, 10345, 300);
                 seedProduct(connection, "10000002", "Aspirin", 0.50, 12453, 500);
                 seedProduct(connection, "10000003", "Analgin", 1.20, 4235, 200);
-                seedProduct(connection, "10000004", "Celebrex 100mg", 10.00, 3420, 200);
-                seedProduct(connection, "10000005", "Celebrex 200mg", 18.50, 1450, 150);
-                seedProduct(connection, "10000006", "Retin-A Tretin 30g", 25.00, 2013, 200);
-                seedProduct(connection, "10000007", "Lipitor TB 20mg", 15.50, 1562, 200);
-                seedProduct(connection, "10000008", "Claritin CR 60g", 19.50, 2540, 200);
-                seedProduct(connection, "20000004", "Iodine tincture", 0.30, 2213, 200);
+                seedProduct(connection, "10000004", "Celebrex, caps 100 mg", 10.00, 3420, 200);
+                seedProduct(connection, "10000005", "Celebrex, caps 200 mg", 18.50, 1450, 150);
+                seedProduct(connection, "10000006", "Retin-A Tretin, 30 g", 25.00, 2013, 200);
+                seedProduct(connection, "10000007", "Lipitor TB, 20 mg", 15.50, 1562, 200);
+                seedProduct(connection, "10000008", "Claritin CR, 60g", 19.50, 2540, 200);
+                seedProduct(connection, "20000004", "Iodine tincture", 0.30, 22134, 200);
                 seedProduct(connection, "20000005", "Rhynol", 2.50, 1908, 300);
                 seedProduct(connection, "30000001", "Ospen", 10.50, 809, 200);
                 seedProduct(connection, "30000002", "Amopen", 15.00, 1340, 300);
                 seedProduct(connection, "40000001", "Vitamin C", 1.20, 3258, 300);
                 seedProduct(connection, "40000002", "Vitamin B12", 1.30, 2673, 300);
+            }
+            if (count(connection, "orders") == 0) {
+                seedHistoricalOrder(connection, "ACC0001", "2026-02-20T09:30:00", "2026-02-23T15:00:00",
+                        "delivery", "InfoPharma Courier Service", "INF-SA-0001", "2026-02-23T15:00:00",
+                        List.of(
+                                line("10000001", 10, 0.10),
+                                line("10000003", 20, 1.20),
+                                line("20000004", 12, 0.30),
+                                line("20000005", 10, 2.50),
+                                line("30000001", 10, 10.50),
+                                line("30000002", 20, 15.00),
+                                line("40000001", 20, 1.20),
+                                line("40000002", 20, 1.30)
+                        ));
+                seedHistoricalOrder(connection, "ACC0002", "2026-02-25T11:15:00", "2026-02-26T17:00:00",
+                        "delivery", "DHL", "DHL-SA-0002", "2026-02-26T17:00:00",
+                        List.of(
+                                line("10000001", 10, 0.10),
+                                line("10000003", 20, 1.20),
+                                line("20000005", 10, 2.50),
+                                line("30000002", 20, 15.00),
+                                line("40000002", 20, 1.30)
+                        ));
+                seedHistoricalOrder(connection, "ACC0003", "2026-02-25T13:40:00", "2026-02-27T10:00:00",
+                        "delivery", "DHL", "DHL-SA-0003", "2026-02-27T10:00:00",
+                        List.of(
+                                line("10000003", 20, 1.20),
+                                line("20000004", 12, 0.30),
+                                line("30000001", 3, 10.50),
+                                line("30000002", 10, 15.00),
+                                line("40000001", 20, 1.20),
+                                line("40000002", 20, 1.30)
+                        ));
+                seedHistoricalOrder(connection, "ACC0002", "2026-03-10T09:20:00", "2026-03-12T11:00:00",
+                        "delivery", "InfoPharma Courier Service", "INF-SA-0004", "2026-03-12T11:00:00",
+                        List.of(
+                                line("20000005", 10, 2.50),
+                                line("30000001", 10, 10.50),
+                                line("30000002", 20, 15.00)
+                        ));
+                seedHistoricalOrder(connection, "ACC0003", "2026-03-25T14:05:00", "2026-03-27T10:00:00",
+                        "delivery", "InfoPharma Courier Service", "INF-SA-0005", "2026-03-27T10:00:00",
+                        List.of(
+                                line("10000003", 20, 1.20),
+                                line("10000004", 5, 10.00),
+                                line("10000005", 5, 18.50),
+                                line("10000006", 5, 25.00),
+                                line("10000007", 10, 15.50),
+                                line("30000001", 10, 10.50),
+                                line("30000002", 20, 15.00),
+                                line("40000002", 20, 1.30)
+                        ));
+                seedHistoricalOrder(connection, "ACC0003", "2026-04-01T09:10:00", "2026-04-03T10:00:00",
+                        "delivery", "InfoPharma Courier Service", "INF-SA-0006", "2026-04-03T10:00:00",
+                        List.of(
+                                line("10000003", 20, 1.20),
+                                line("10000004", 5, 10.00),
+                                line("10000005", 5, 18.50),
+                                line("10000006", 5, 25.00),
+                                line("10000007", 10, 15.50),
+                                line("30000001", 10, 10.50),
+                                line("40000002", 20, 1.30)
+                        ));
+            }
+            if (count(connection, "payments") == 0) {
+                seedHistoricalPayment(connection, "ACC0003", 259.10, "BANK_TRANSFER", "HELLO-CLR-20260305",
+                        "2026-03-05", "Historical balance clearance recorded from sample data");
+                seedHistoricalPayment(connection, "ACC0001", 508.60, "BANK_TRANSFER", "CITY-CLR-20260315",
+                        "2026-03-15", "Full payment cleared by bank transfer");
+                seedHistoricalPayment(connection, "ACC0002", 806.00, "CARD", "COSY-CLR-20260315",
+                        "2026-03-15", "Full payment cleared by company credit card");
+            }
+            if (count(connection, "non_commercial_applications") == 0) {
+                seedApplication(connection, "cool@example.com", "APPROVED", "2026-02-25T10:00:00", "2026-02-26T09:00:00", "Imported from IPOS-PU sample data");
+                seedApplication(connection, "cool1@example.com", "PENDING", "2026-02-25T10:05:00", null, "Imported from IPOS-PU sample data");
+                seedApplication(connection, "pondpharma@example.com", "PENDING", "2026-02-25T10:10:00", null, "Commercial member application placeholder imported from IPOS-PU sample data");
             }
         }
     }
@@ -2320,6 +2398,189 @@ final class Database {
     }
 
     /**
+     * Inserts a merchant record used during database seeding.
+     *
+     * @param connection the active database connection to use
+     * @param merchantId the merchant identifier
+     * @param name the account holder name
+     * @param email the stored merchant email address
+     * @param address the merchant address
+     * @param phone the merchant phone number
+     * @param creditLimit the merchant credit limit
+     * @param discountType the configured discount type
+     * @param fixedRate the fixed discount rate percentage
+     * @param tier1 the flexible plan first tier rate
+     * @param tier2 the flexible plan second tier rate
+     * @param tier3 the flexible plan third tier rate
+     * @param createdAt the creation timestamp
+     * @throws SQLException if a database access error occurs
+     */
+    private void insertMerchant(Connection connection, String merchantId, String name, String email, String address, String phone,
+                                double creditLimit, String discountType, double fixedRate, double tier1, double tier2, double tier3,
+                                String createdAt) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                INSERT INTO merchants (
+                    merchant_id, name, email, address, phone, credit_limit, balance, account_status,
+                    discount_type, fixed_discount_rate, flexible_rate_tier1, flexible_rate_tier2, flexible_rate_tier3,
+                    pending_discount_credit, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, 'NORMAL', ?, ?, ?, ?, ?, 0, ?, ?)
+                """)) {
+            ps.setString(1, merchantId);
+            ps.setString(2, name);
+            ps.setString(3, email);
+            ps.setString(4, address);
+            ps.setString(5, phone);
+            ps.setDouble(6, creditLimit);
+            ps.setString(7, discountType);
+            ps.setDouble(8, fixedRate);
+            ps.setDouble(9, tier1);
+            ps.setDouble(10, tier2);
+            ps.setDouble(11, tier3);
+            ps.setString(12, createdAt);
+            ps.setString(13, createdAt);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Inserts a historical seeded order together with its items, invoice, and stock movements.
+     *
+     * @param connection the active database connection to use
+     * @param merchantId the merchant who placed the order
+     * @param orderDateTime the order timestamp
+     * @param dispatchDateTime the dispatch timestamp
+     * @param dispatchedBy the staff user who dispatched the order
+     * @param courier the courier used for delivery
+     * @param trackingNumber the recorded tracking or reference number
+     * @param deliveredDateTime the delivered timestamp
+     * @param items the line items to insert
+     * @throws SQLException if a database access error occurs
+     */
+    private void seedHistoricalOrder(Connection connection, String merchantId, String orderDateTime, String dispatchDateTime,
+                                     String dispatchedBy, String courier, String trackingNumber, String deliveredDateTime,
+                                     List<OrderSeedLine> items) throws SQLException {
+        double subtotal = items.stream().mapToDouble(item -> item.unitPrice() * item.quantity()).sum();
+        long orderId;
+        try (PreparedStatement insert = connection.prepareStatement("""
+                INSERT INTO orders (
+                    merchant_id, order_date, status, subtotal, discount_amount, total_amount,
+                    dispatched_by, dispatch_date, courier, tracking_number, expected_delivery, delivered_date
+                ) VALUES (?, ?, 'DELIVERED', ?, 0, ?, ?, ?, ?, ?, ?, ?)
+                """, Statement.RETURN_GENERATED_KEYS)) {
+            insert.setString(1, merchantId);
+            insert.setString(2, orderDateTime);
+            insert.setDouble(3, subtotal);
+            insert.setDouble(4, subtotal);
+            insert.setString(5, dispatchedBy);
+            insert.setString(6, dispatchDateTime);
+            insert.setString(7, courier);
+            insert.setString(8, trackingNumber);
+            insert.setString(9, deliveredDateTime);
+            insert.setString(10, deliveredDateTime);
+            insert.executeUpdate();
+            try (ResultSet keys = insert.getGeneratedKeys()) {
+                keys.next();
+                orderId = keys.getLong(1);
+            }
+        }
+
+        for (OrderSeedLine item : items) {
+            double lineTotal = item.unitPrice() * item.quantity();
+            try (PreparedStatement itemInsert = connection.prepareStatement("""
+                    INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total)
+                    VALUES (?, ?, ?, ?, ?)
+                    """)) {
+                itemInsert.setLong(1, orderId);
+                itemInsert.setString(2, item.productId());
+                itemInsert.setInt(3, item.quantity());
+                itemInsert.setDouble(4, item.unitPrice());
+                itemInsert.setDouble(5, lineTotal);
+                itemInsert.executeUpdate();
+            }
+            try (PreparedStatement updateProduct = connection.prepareStatement("""
+                    UPDATE products SET stock_level = stock_level - ?, updated_at = ? WHERE product_id = ?
+                    """)) {
+                updateProduct.setInt(1, item.quantity());
+                updateProduct.setString(2, orderDateTime);
+                updateProduct.setString(3, item.productId());
+                updateProduct.executeUpdate();
+            }
+            insertStockMovementAt(connection, item.productId(), "SALE", item.quantity(), orderDateTime, "ORDER", Long.toString(orderId));
+        }
+
+        LocalDate issueDate = LocalDate.parse(orderDateTime.substring(0, 10));
+        try (PreparedStatement invoiceInsert = connection.prepareStatement("""
+                INSERT INTO invoices (order_id, merchant_id, issue_date, due_date, total_amount, paid_amount, status)
+                VALUES (?, ?, ?, ?, ?, 0, 'ISSUED')
+                """)) {
+            invoiceInsert.setLong(1, orderId);
+            invoiceInsert.setString(2, merchantId);
+            invoiceInsert.setString(3, issueDate.toString());
+            invoiceInsert.setString(4, issueDate.withDayOfMonth(issueDate.lengthOfMonth()).toString());
+            invoiceInsert.setDouble(5, subtotal);
+            invoiceInsert.executeUpdate();
+        }
+
+        updateMerchantBalance(connection, merchantId);
+    }
+
+    /**
+     * Inserts a historical payment and applies it to outstanding invoices.
+     *
+     * @param connection the active database connection to use
+     * @param merchantId the merchant making the payment
+     * @param amount the payment amount
+     * @param method the payment method
+     * @param reference the payment reference
+     * @param paymentDate the payment date
+     * @param notes the payment notes
+     * @throws SQLException if a database access error occurs
+     */
+    private void seedHistoricalPayment(Connection connection, String merchantId, double amount, String method, String reference,
+                                       String paymentDate, String notes) throws SQLException {
+        try (PreparedStatement insert = connection.prepareStatement("""
+                INSERT INTO payments (merchant_id, amount, method, reference, payment_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """)) {
+            insert.setString(1, merchantId);
+            insert.setDouble(2, amount);
+            insert.setString(3, method);
+            insert.setString(4, reference);
+            insert.setString(5, paymentDate);
+            insert.setString(6, notes);
+            insert.executeUpdate();
+        }
+        applyPaymentToInvoices(connection, merchantId, amount);
+        updateMerchantBalance(connection, merchantId);
+        evaluateMerchantAccount(connection, merchantId);
+    }
+
+    /**
+     * Inserts a sample application row used for cross-subsystem demo preparation.
+     *
+     * @param connection the active database connection to use
+     * @param email the application email address
+     * @param status the stored application status
+     * @param createdAt the creation timestamp
+     * @param decisionAt the optional decision timestamp
+     * @param notes any notes to attach to the application
+     * @throws SQLException if a database access error occurs
+     */
+    private void seedApplication(Connection connection, String email, String status, String createdAt, String decisionAt, String notes) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                INSERT INTO non_commercial_applications (email, status, created_at, decided_at, notes)
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            ps.setString(1, email);
+            ps.setString(2, status);
+            ps.setString(3, createdAt);
+            setNullable(ps, 4, decisionAt);
+            ps.setString(5, notes);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
      * Inserts a single product record used during database seeding.
      * <p>
      * The product is stored with its identifier, name, pricing, stock levels, and timestamps.
@@ -2372,6 +2633,34 @@ final class Database {
             ps.setString(3, role);
             ps.setString(4, merchantId);
             ps.setString(5, now());
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Inserts a stock movement record at a specific historical timestamp.
+     *
+     * @param connection the active database connection to use
+     * @param productId the product identifier associated with the movement
+     * @param type the movement type to record
+     * @param quantity the quantity moved
+     * @param happenedAt the historical timestamp to store
+     * @param referenceType the optional reference type for the movement
+     * @param referenceId the optional reference identifier for the movement
+     * @throws SQLException if a database access error occurs
+     */
+    private void insertStockMovementAt(Connection connection, String productId, String type, int quantity, String happenedAt,
+                                       String referenceType, String referenceId) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                INSERT INTO stock_movements (product_id, movement_type, quantity, happened_at, reference_type, reference_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """)) {
+            ps.setString(1, productId);
+            ps.setString(2, type);
+            ps.setInt(3, quantity);
+            ps.setString(4, happenedAt);
+            ps.setString(5, referenceType);
+            ps.setString(6, referenceId);
             ps.executeUpdate();
         }
     }
@@ -2585,4 +2874,17 @@ final class Database {
      * @param end the range end date
      */
     private record Range(LocalDate start, LocalDate end) {}
+
+    /**
+     * Represents one line item used while seeding historical orders.
+     *
+     * @param productId the product identifier
+     * @param quantity the ordered quantity
+     * @param unitPrice the unit price used in the scenario
+     */
+    private record OrderSeedLine(String productId, int quantity, double unitPrice) {}
+
+    private static OrderSeedLine line(String productId, int quantity, double unitPrice) {
+        return new OrderSeedLine(productId, quantity, unitPrice);
+    }
 }

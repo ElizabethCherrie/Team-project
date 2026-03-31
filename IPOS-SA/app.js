@@ -14,28 +14,33 @@ const pageMap = {
 };
 
 const seededCredentials = {
-  ADMINISTRATOR: { username: "admin", password: "admin123" },
-  MANAGER: { username: "manager", password: "manager123" },
-  OPERATIONS_STAFF: { username: "ops", password: "ops123" },
-  ACCOUNTING_STAFF: { username: "accounts", password: "accounts123" },
-  MERCHANT: { username: "merchant1", password: "merchant123" },
+  ADMINISTRATOR: { username: "Sysdba", password: "London_weighting" },
+  MANAGER: { username: "manager", password: "Get_it_done" },
+  OPERATIONS_STAFF: { username: "delivery", password: "Too_dark" },
+  ACCOUNTING_STAFF: { username: "accountant", password: "Count_money" },
+  MERCHANT: { username: "city", password: "northampton" },
 };
 
 const personaTabs = {
-  ALL: ["John Manager", "Sarah Director", "Mike Supervisor", "Lisa Executive"],
-  ADMINISTRATOR: ["Admin User", "System Admin", "Super Admin", "IT Admin"],
-  MANAGER: ["Store Manager", "Sales Manager", "Operations Manager", "Regional Manager"],
-  OPERATIONS_STAFF: ["John Manager", "Sarah Director", "Mike Supervisor", "Lisa Executive"],
-  ACCOUNTING_STAFF: ["Sarah Chen", "Marcus Johnson", "Emily Rodriguez", "David Kim"],
-  MERCHANT: ["John Manager", "Sarah Director", "Mike Supervisor", "Lisa Executive"],
+  ALL: ["Sysdba", "manager", "accountant", "city"],
+  ADMINISTRATOR: ["Sysdba", "manager", "accountant", "delivery"],
+  MANAGER: ["manager", "warehouse1", "warehouse2", "delivery"],
+  OPERATIONS_STAFF: ["delivery", "warehouse1", "warehouse2"],
+  ACCOUNTING_STAFF: ["accountant", "clerk", "manager"],
+  MERCHANT: ["city", "cosymed", "hello"],
 };
 
 const profileDirectory = {
-  admin: ["Elizabeth Cherrie", "elizabeth.cherrie@londonsoftwarehouse.com", "System Administrator", "ADM-001"],
-  manager: ["Humd Al-Hassan", "humd.alhassan@londonsoftwarehouse.com", "Operations Manager", "MGR-001"],
-  ops: ["Nizar Karim", "nizar.karim@londonsoftwarehouse.com", "Operations Staff", "OPS-001"],
-  accounts: ["Ali Hassan", "ali.hassan@londonsoftwarehouse.com", "Accounting Staff", "ACC-001"],
-  merchant1: ["CosyMed Pharmacy", "orders@cosymedpharmacy.co.uk", "Merchant Account", "M0001"],
+  Sysdba: ["System DBA", "sysdba@infopharma.local", "Administrator", "ADM-001"],
+  manager: ["Director of Operations", "ops.director@infopharma.local", "Director of Operations", "MGR-001"],
+  accountant: ["Senior Accountant", "accountant@infopharma.local", "Senior Accountant", "ACC-001"],
+  clerk: ["Accounts Clerk", "clerk@infopharma.local", "Accountant", "ACC-002"],
+  warehouse1: ["Warehouse Employee 1", "warehouse1@infopharma.local", "Warehouse Employee", "OPS-101"],
+  warehouse2: ["Warehouse Employee 2", "warehouse2@infopharma.local", "Warehouse Employee", "OPS-102"],
+  delivery: ["Delivery Team", "delivery@infopharma.local", "Delivery Department Employee", "OPS-103"],
+  city: ["CityPharmacy", "citypharmacy@example.com", "Merchant Account", "ACC0001"],
+  cosymed: ["Cosymed Ltd", "cosymed@example.com", "Merchant Account", "ACC0002"],
+  hello: ["HelloPharmacy", "hello@example.com", "Merchant Account", "ACC0003"],
 };
 
 const actionDescriptions = {
