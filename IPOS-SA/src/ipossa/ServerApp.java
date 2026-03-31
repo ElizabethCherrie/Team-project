@@ -47,6 +47,19 @@ public final class ServerApp {
                 ? Paths.get(args[1]).toAbsolutePath()
                 : Paths.get("data", "ipos-sa.db").toAbsolutePath();
 
+        startServer(port, dbPath, staticRoot);
+    }
+
+    /**
+     * Starts the embedded IPOS-SA HTTP server using the supplied runtime configuration.
+     *
+     * @param port the port to bind the server to
+     * @param dbPath the SQLite database file to use
+     * @param staticRoot the folder containing the static frontend assets
+     * @return the started HTTP server instance
+     * @throws Exception if the database or HTTP server cannot be initialized
+     */
+    static HttpServer startServer(int port, Path dbPath, Path staticRoot) throws Exception {
         Class.forName("org.sqlite.JDBC");
 
         Database database = new Database(dbPath);
@@ -61,5 +74,6 @@ public final class ServerApp {
         System.out.println("SQLite database: " + dbPath);
         System.out.println("Static frontend root: " + staticRoot);
         System.out.println("Default users: admin/admin123, manager/manager123, ops/ops123, accounts/accounts123, merchant1/merchant123");
+        return server;
     }
 }
