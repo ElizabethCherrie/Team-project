@@ -1,6 +1,7 @@
 package ipossa;
 
 import java.awt.Desktop;
+import java.net.BindException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,8 +38,14 @@ public final class Main {
                 ? Paths.get(args[2]).toAbsolutePath()
                 : appRoot.toAbsolutePath();
 
-        ServerApp.startServer(port, dbPath, staticRoot);
-        openBrowser("http://localhost:" + port + "/login.html");
+        try {
+            ServerApp.startServer(port, dbPath, staticRoot);
+            openBrowser("http://localhost:" + port + "/login.html");
+        } catch (BindException ex) {
+            String url = "http://localhost:" + port + "/login.html";
+            System.out.println("Port " + port + " is already in use. Assuming IPOS-SA is already running.");
+            openBrowser(url);
+        }
     }
 
     /**
