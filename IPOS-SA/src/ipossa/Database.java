@@ -22,9 +22,22 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * SQLite-backed service layer for the IPOS-SA subsystem.
+ *
+ * <p>This class owns schema creation, seed data, authentication sessions,
+ * merchant/account logic, catalogue management, ordering, invoicing, payment
+ * handling, reporting, and non-commercial application processing for the
+ * prototype.</p>
+ */
 final class Database {
     private final Path dbPath;
 
+    /**
+     * Creates a database service for the supplied SQLite database file.
+     *
+     * @param dbPath the path to the SQLite database file
+     */
     Database(Path dbPath) {
         this.dbPath = dbPath;
     }
@@ -245,6 +258,17 @@ final class Database {
         }
     }
 
+    /**
+     * Retrieves the current authenticated session and returns the same shape used by login.
+     * <p>
+     * The session token is resolved from the request headers. For merchants, the response also
+     * includes merchant details and account warnings. For administrator and manager roles, the
+     * response includes low-stock warnings used by the dashboard.
+     *
+     * @param headers the HTTP headers containing the session token
+     * @return a map containing the authenticated session details
+     * @throws SQLException if a database access error occurs
+     */
     Map<String, Object> getSession(Headers headers) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
@@ -2545,7 +2569,20 @@ final class Database {
         return value;
     }
 
+    /**
+     * Lightweight authenticated-user context resolved from a session token.
+     *
+     * @param username the authenticated username
+     * @param role the authenticated role
+     * @param merchantId the merchant linked to the session, when applicable
+     */
     record AuthContext(String username, String role, String merchantId) {}
 
+    /**
+     * Inclusive date range used for report queries.
+     *
+     * @param start the range start date
+     * @param end the range end date
+     */
     private record Range(LocalDate start, LocalDate end) {}
 }

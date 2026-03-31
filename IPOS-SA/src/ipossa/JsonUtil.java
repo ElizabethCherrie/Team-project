@@ -6,14 +6,33 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * Minimal JSON parser and serializer used by the embedded HTTP server.
+ *
+ * <p>The project avoids external web frameworks, so this utility handles the
+ * JSON features needed by the API: objects, arrays, strings, numbers,
+ * booleans, and null values. It also provides field validation helpers for
+ * request bodies.</p>
+ */
 final class JsonUtil {
     private final String text;
     private int index;
 
+    /**
+     * Creates a parser instance for the supplied JSON text.
+     *
+     * @param text the raw JSON payload to parse
+     */
     private JsonUtil(String text) {
         this.text = text;
     }
 
+    /**
+     * Parses raw JSON text into Java collections and primitive wrapper types.
+     *
+     * @param text the raw JSON string
+     * @return the parsed value, typically a map for request bodies
+     */
     static Object parse(String text) {
         if (text == null || text.isBlank()) {
             return Map.of();
@@ -27,6 +46,13 @@ final class JsonUtil {
         return value;
     }
 
+    /**
+     * Serializes a Java object graph made up of maps, iterables, strings,
+     * numbers, booleans, and null values into JSON text.
+     *
+     * @param value the value to serialize
+     * @return the JSON representation
+     */
     static String stringify(Object value) {
         if (value == null) {
             return "null";
@@ -54,6 +80,12 @@ final class JsonUtil {
         return stringify(String.valueOf(value));
     }
 
+    /**
+     * Casts a parsed JSON value to an object map.
+     *
+     * @param value the parsed JSON value
+     * @return the value as a string-keyed map
+     */
     @SuppressWarnings("unchecked")
     static Map<String, Object> asObject(Object value) {
         if (!(value instanceof Map<?, ?> map)) {
@@ -66,6 +98,13 @@ final class JsonUtil {
         return result;
     }
 
+    /**
+     * Reads a required array field from a JSON body.
+     *
+     * @param body the JSON object body
+     * @param field the required field name
+     * @return the field as a mutable list of objects
+     */
     @SuppressWarnings("unchecked")
     static List<Object> requireArray(Map<String, Object> body, String field) {
         Object value = body.get(field);
@@ -75,6 +114,13 @@ final class JsonUtil {
         throw new ApiException(400, field + " must be an array");
     }
 
+    /**
+     * Reads a required string field from a JSON body.
+     *
+     * @param body the JSON object body
+     * @param field the required field name
+     * @return the non-blank string value
+     */
     static String requireString(Map<String, Object> body, String field) {
         String value = optionalString(body, field);
         if (value == null || value.isBlank()) {
@@ -83,20 +129,49 @@ final class JsonUtil {
         return value;
     }
 
+    /**
+     * Reads a required string field and normalizes it to upper case.
+     *
+     * @param body the JSON object body
+     * @param field the required field name
+     * @return the upper-case value
+     */
     static String requireUpper(Map<String, Object> body, String field) {
         return requireString(body, field).toUpperCase(Locale.ROOT);
     }
 
+    /**
+     * Reads an optional string field from a JSON body.
+     *
+     * @param body the JSON object body
+     * @param field the optional field name
+     * @return the string value or {@code null}
+     */
     static String optionalString(Map<String, Object> body, String field) {
         Object value = body.get(field);
         return value == null ? null : String.valueOf(value);
     }
 
+    /**
+     * Reads an optional string field, falling back when the field is absent.
+     *
+     * @param body the JSON object body
+     * @param field the optional field name
+     * @param fallback the fallback value to use when the field is absent
+     * @return the provided value or the fallback
+     */
     static String optionalString(Map<String, Object> body, String field, String fallback) {
         String value = optionalString(body, field);
         return value == null ? fallback : value;
     }
 
+    /**
+     * Reads a required numeric field as a double.
+     *
+     * @param body the JSON object body
+     * @param field the required field name
+     * @return the numeric value as a double
+     */
     static double requireDouble(Map<String, Object> body, String field) {
         Object value = body.get(field);
         if (!(value instanceof Number number)) {
@@ -105,11 +180,26 @@ final class JsonUtil {
         return number.doubleValue();
     }
 
+    /**
+     * Reads an optional numeric field as a double.
+     *
+     * @param body the JSON object body
+     * @param field the optional field name
+     * @param fallback the default value to use when absent
+     * @return the numeric value or the fallback
+     */
     static double optionalDouble(Map<String, Object> body, String field, double fallback) {
         Object value = body.get(field);
         return value instanceof Number number ? number.doubleValue() : fallback;
     }
 
+    /**
+     * Reads a required numeric field as an integer.
+     *
+     * @param body the JSON object body
+     * @param field the required field name
+     * @return the numeric value as an integer
+     */
     static int requireInt(Map<String, Object> body, String field) {
         Object value = body.get(field);
         if (!(value instanceof Number number)) {
@@ -118,6 +208,13 @@ final class JsonUtil {
         return number.intValue();
     }
 
+    /**
+     * Reads a required boolean field from a JSON body.
+     *
+     * @param body the JSON object body
+     * @param field the required field name
+     * @return the boolean value
+     */
     static boolean requireBoolean(Map<String, Object> body, String field) {
         Object value = body.get(field);
         if (value instanceof Boolean bool) {

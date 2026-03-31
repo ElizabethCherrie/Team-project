@@ -18,10 +18,23 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * Central HTTP handler for the IPOS-SA prototype.
+ *
+ * <p>This class routes incoming requests to subsystem operations, serves the
+ * static frontend, validates authorization, and serializes JSON responses for
+ * the demo website and any integrating subsystems.</p>
+ */
 final class ApiHandler implements HttpHandler {
     private final Database db;
     private final Path staticRoot;
 
+    /**
+     * Creates the API handler with its backing database and static file root.
+     *
+     * @param db the database service used by the routes
+     * @param staticRoot the root folder for static frontend assets
+     */
     ApiHandler(Database db, Path staticRoot) {
         this.db = db;
         this.staticRoot = staticRoot.normalize();
