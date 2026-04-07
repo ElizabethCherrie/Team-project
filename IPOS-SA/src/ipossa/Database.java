@@ -52,7 +52,9 @@ final class Database {
      */
     void bootstrap() throws SQLException {
         try (Connection connection = connect(); Statement statement = connection.createStatement()) {
+            // initialisation
             statement.execute("PRAGMA foreign_keys = ON");
+            // creates all relevent tables (if they dont already exist)
             statement.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         username TEXT PRIMARY KEY,
@@ -194,6 +196,7 @@ final class Database {
                     )
                     """);
         }
+        // runs seed function to populate db with initial data
         seed();
     }
 
@@ -211,6 +214,7 @@ final class Database {
      */
     Map<String, Object> login(String username, String password) throws SQLException {
         try (Connection connection = connect();
+             // retrieves user details
              PreparedStatement ps = connection.prepareStatement("""
                      SELECT username, role, merchant_id, active
                      FROM users
@@ -218,6 +222,7 @@ final class Database {
                      """)) {
             ps.setString(1, username);
             ps.setString(2, password);
+            // checks if credentials valid
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     throw new ApiException(401, "Invalid credentials");
@@ -227,6 +232,7 @@ final class Database {
                 }
                 Map<String, Object> response = new LinkedHashMap<>();
                 String sessionToken = UUID.randomUUID().toString();
+                // handles sessions
                 try (PreparedStatement deleteSessions = connection.prepareStatement("DELETE FROM sessions WHERE username = ?");
                      PreparedStatement insertSession = connection.prepareStatement("""
                              INSERT INTO sessions (session_token, username, role, merchant_id, created_at)
@@ -241,6 +247,7 @@ final class Database {
                     insertSession.setString(5, now());
                     insertSession.executeUpdate();
                 }
+                // handels responses
                 response.put("username", rs.getString("username"));
                 response.put("role", rs.getString("role"));
                 response.put("merchantId", rs.getString("merchant_id"));
@@ -272,11 +279,13 @@ final class Database {
     Map<String, Object> getSession(Headers headers) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
+            // creates map for response
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("username", auth.username());
             response.put("role", auth.role());
             response.put("merchantId", auth.merchantId());
             response.put("sessionToken", headers.getFirst("X-Session-Token"));
+            // handle auth
             if ("MERCHANT".equals(auth.role()) && auth.merchantId() != null) {
                 response.put("merchant", getMerchantById(connection, auth.merchantId()));
                 response.put("warnings", evaluateMerchantAccount(connection, auth.merchantId()).get("warnings"));
@@ -346,6 +355,7 @@ final class Database {
      */
     Map<String, Object> updateUser(String username, Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
+             //sql statement
              PreparedStatement ps = connection.prepareStatement("""
                      UPDATE users
                      SET password = COALESCE(?, password),
@@ -354,6 +364,7 @@ final class Database {
                          active = COALESCE(?, active)
                      WHERE username = ?
                      """)) {
+            // data to be updated
             setNullable(ps, 1, body.containsKey("password") ? ipossa.JsonUtil.requireString(body, "password") : null);
             setNullable(ps, 2, body.containsKey("role") ? ipossa.JsonUtil.requireUpper(body, "role") : null);
             setNullable(ps, 3, body.containsKey("merchantId") ? JsonUtil.optionalString(body, "merchantId") : null);
@@ -424,14 +435,18 @@ final class Database {
     List<Map<String, Object>> listMerchants(Headers headers, Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
+            // begins building statement by selecting all form merchants
             StringBuilder sql = new StringBuilder("SELECT * FROM merchants WHERE 1 = 1");
             List<Object> params = new ArrayList<>();
+            // Normalise optional search term for case insensitivity
             String search = query.getOrDefault("q", "").trim().toLowerCase(Locale.ROOT);
             if ("MERCHANT".equals(auth.role())) {
+                // Merchants are restricted to their own record.
                 sql.append(" AND merchant_id = ?");
                 params.add(auth.merchantId());
             }
             if (!search.isBlank()) {
+                // Apply the search filter across key merchant fields.
                 sql.append(" AND (LOWER(merchant_id) LIKE ? OR LOWER(name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(account_status) LIKE ?)");
                 String pattern = "%" + search + "%";
                 params.add(pattern);
@@ -439,7 +454,9 @@ final class Database {
                 params.add(pattern);
                 params.add(pattern);
             }
+            // order results
             sql.append(" ORDER BY merchant_id");
+            // executes statement
             try (PreparedStatement ps = connection.prepareStatement(sql.toString())) {
                 for (int i = 0; i < params.size(); i++) {
                     ps.setObject(i + 1, params.get(i));
@@ -484,13 +501,16 @@ final class Database {
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> createMerchant(Map<String, Object> body) throws SQLException {
+        // read in merchant data
         String merchantId = JsonUtil.requireString(body, "merchantId");
         String username = JsonUtil.requireString(body, "username");
         String password = JsonUtil.requireString(body, "password");
+        // create timestamp to be used for all records
         String now = now();
         try (Connection connection = connect()) {
             connection.setAutoCommit(false);
             try {
+                // create sql statement and add relevant fields for merchant table
                 try (PreparedStatement merchantPs = connection.prepareStatement("""
                         INSERT INTO merchants (
                             merchant_id, name, email, address, phone, credit_limit, balance, account_status,
@@ -513,6 +533,7 @@ final class Database {
                     merchantPs.setString(13, now);
                     merchantPs.executeUpdate();
                 }
+                // create sql statement and add relevant fields for user table
                 try (PreparedStatement userPs = connection.prepareStatement("""
                         INSERT INTO users (username, password, role, merchant_id, active, created_at)
                         VALUES (?, ?, 'MERCHANT', ?, 1, ?)
@@ -547,6 +568,7 @@ final class Database {
      */
     Map<String, Object> updateMerchant(String merchantId, Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
+             // create statement and set relecant data
              PreparedStatement ps = connection.prepareStatement("""
                      UPDATE merchants
                      SET name = COALESCE(?, name),
@@ -565,9 +587,11 @@ final class Database {
             ps.setString(6, now());
             ps.setString(7, merchantId);
             if (ps.executeUpdate() == 0) {
+                // catch exception when attempting to update non-existing merchant
                 throw new ApiException(404, "Merchant not found");
             }
         }
+        // updates discount plan
         if (body.containsKey("discountType") || body.containsKey("fixedDiscountRate")) {
             updateDiscountPlan(merchantId, body);
         }
@@ -588,6 +612,7 @@ final class Database {
         try (Connection connection = connect()) {
             connection.setAutoCommit(false);
             try {
+                // create delete statement and add relevant data
                 try (PreparedStatement deleteUser = connection.prepareStatement("DELETE FROM users WHERE merchant_id = ?");
                      PreparedStatement deleteMerchant = connection.prepareStatement("DELETE FROM merchants WHERE merchant_id = ?")) {
                     deleteUser.setString(1, merchantId);
@@ -598,7 +623,9 @@ final class Database {
                         throw new ApiException(404, "Merchant not found");
                     }
                 }
+                //commit
                 connection.commit();
+                // catch exceptions and roll back then thrown exception
             } catch (SQLException ex) {
                 connection.rollback();
                 throw ex;
@@ -659,6 +686,7 @@ final class Database {
             throw new ApiException(400, "discountType must be FIXED or FLEXIBLE");
         }
         try (Connection connection = connect();
+             // create sql statement and add relevant data
              PreparedStatement ps = connection.prepareStatement("""
                      UPDATE merchants
                      SET discount_type = ?, fixed_discount_rate = ?, flexible_rate_tier1 = ?,
@@ -717,13 +745,16 @@ final class Database {
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> restoreMerchant(String merchantId, Map<String, Object> body) throws SQLException {
+        // throw error if not authorized
         if (!JsonUtil.requireBoolean(body, "directorApproved")) {
             throw new ApiException(400, "Director approval is required");
         }
+        // defines new status
         String newStatus = JsonUtil.requireUpper(body, "newStatus");
         if (!List.of("NORMAL", "SUSPENDED").contains(newStatus)) {
             throw new ApiException(400, "newStatus must be NORMAL or SUSPENDED");
         }
+        // creates sql and adds required data
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
                      UPDATE merchants
@@ -733,6 +764,7 @@ final class Database {
             ps.setString(1, newStatus);
             ps.setString(2, now());
             ps.setString(3, merchantId);
+            // throws error if trying to update merchant that dosent exist
             if (ps.executeUpdate() == 0) {
                 throw new ApiException(404, "Merchant not found");
             }
@@ -785,6 +817,7 @@ final class Database {
      */
     List<Map<String, Object>> searchProducts(String query) throws SQLException {
         try (Connection connection = connect();
+             // it searches for a product, what do you expect the comments to say?
              PreparedStatement ps = connection.prepareStatement("""
                      SELECT *
                      FROM products
@@ -812,6 +845,7 @@ final class Database {
      */
     Map<String, Object> getProduct(String productId) throws SQLException {
         try (Connection connection = connect()) {
+            // this exists to overload prod
             return getProductById(connection, productId);
         }
     }
@@ -827,6 +861,7 @@ final class Database {
      */
     Map<String, Object> createProduct(Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
+             // creates sql statement and adds all relevent data and then executes it and thats about it.
              PreparedStatement ps = connection.prepareStatement("""
                      INSERT INTO products (product_id, name, unit_price, stock_level, minimum_stock_level, created_at, updated_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -893,6 +928,7 @@ final class Database {
              PreparedStatement ps = connection.prepareStatement("DELETE FROM products WHERE product_id = ?")) {
             ps.setString(1, productId);
             if (ps.executeUpdate() == 0) {
+                // exception thrown if attempting to delete product that does not exist
                 throw new ApiException(404, "Product not found");
             }
         }
@@ -916,6 +952,7 @@ final class Database {
             throw new ApiException(400, "quantity must be greater than 0");
         }
         try (Connection connection = connect()) {
+            // Update stock and movement history in one transaction.
             connection.setAutoCommit(false);
             try {
                 int currentStock = ((Number) getProductById(connection, productId).get("stock_level")).intValue();
@@ -927,9 +964,11 @@ final class Database {
                     ps.setString(3, productId);
                     ps.executeUpdate();
                 }
+                // commit sql statement
                 insertStockMovement(connection, productId, "RESTOCK", quantity, "MANUAL_RESTOCK", JsonUtil.optionalString(body, "reference"));
                 connection.commit();
             } catch (SQLException ex) {
+                // if exception caught, roll back query and throw exception
                 connection.rollback();
                 throw ex;
             } finally {
@@ -955,6 +994,7 @@ final class Database {
         if (minimumStock < 0) {
             throw new ApiException(400, "minimumStockLevel must be non-negative");
         }
+        // updates stock level for given product ID
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
                      UPDATE products SET minimum_stock_level = ?, updated_at = ? WHERE product_id = ?
@@ -963,6 +1003,7 @@ final class Database {
             ps.setString(2, now());
             ps.setString(3, productId);
             if (ps.executeUpdate() == 0) {
+                // thwos exception if you try and update stock for product that does not exist
                 throw new ApiException(404, "Product not found");
             }
         }
@@ -983,42 +1024,55 @@ final class Database {
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> createOrder(Headers headers, Map<String, Object> body) throws SQLException {
+
         String merchantId = JsonUtil.requireString(body, "merchantId");
         List<Object> requestedItems = JsonUtil.requireArray(body, "items");
+        // throws error if no items in order
         if (requestedItems.isEmpty()) {
             throw new ApiException(400, "Order must contain at least one item");
         }
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
+            // throws error if merchant trys to place order for any account other than their own
             if (!Objects.equals(auth.merchantId(), merchantId)) {
                 throw new ApiException(403, "Merchants can only place orders for their own account");
             }
             connection.setAutoCommit(false);
             try {
                 String accountStatus = Objects.toString(evaluateMerchantAccount(connection, merchantId).get("accountStatus"), "NORMAL");
+                // throws error if account is blocked or suspended (or any status other than normal)
                 if (!"NORMAL".equals(accountStatus)) {
                     throw new ApiException(400, "Merchant account is not allowed to place orders: " + accountStatus);
                 }
+                // gets merchant
                 Map<String, Object> merchant = getMerchantById(connection, merchantId);
                 double subtotal = 0;
                 List<Map<String, Object>> items = new ArrayList<>();
+                // itterates through all items in order
                 for (Object itemObject : requestedItems) {
+
+                    // throws error if item quantity less than 0
                     Map<String, Object> requested = JsonUtil.asObject(itemObject);
                     String productId = JsonUtil.requireString(requested, "productId");
                     int quantity = JsonUtil.requireInt(requested, "quantity");
                     if (quantity <= 0) {
                         throw new ApiException(400, "quantity must be greater than 0");
                     }
+
+                    // throws error if insufficient stock
                     Map<String, Object> product = getProductById(connection, productId);
                     if (((Number) product.get("stock_level")).intValue() < quantity) {
                         throw new ApiException(400, "Insufficient stock for product " + productId);
                     }
+
+                    // adds price to subtotal
                     double unitPrice = ((Number) product.get("unit_price")).doubleValue();
                     double lineTotal = unitPrice * quantity;
                     subtotal += lineTotal;
                     items.add(Map.of("productId", productId, "quantity", quantity, "unitPrice", unitPrice, "lineTotal", lineTotal));
                 }
 
+                // calculates discount, total price, and throws error if price exceeding credit limit
                 double discountAmount = calculateDiscount(merchant, subtotal);
                 double totalAmount = Math.max(0, subtotal - discountAmount);
                 double creditLimit = ((Number) merchant.get("credit_limit")).doubleValue();
@@ -1027,6 +1081,7 @@ final class Database {
                     throw new ApiException(400, "Credit limit exceeded");
                 }
 
+                // sql statement to create order in db
                 long orderId;
                 try (PreparedStatement insert = connection.prepareStatement("""
                         INSERT INTO orders (merchant_id, order_date, status, subtotal, discount_amount, total_amount)
@@ -1044,6 +1099,7 @@ final class Database {
                     }
                 }
 
+                // adds items to order using table orderItems
                 for (Map<String, Object> item : items) {
                     try (PreparedStatement itemInsert = connection.prepareStatement("""
                             INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total)
@@ -1056,6 +1112,8 @@ final class Database {
                         itemInsert.setDouble(5, ((Number) item.get("lineTotal")).doubleValue());
                         itemInsert.executeUpdate();
                     }
+
+                    // updates stock level in DB
                     try (PreparedStatement updateProduct = connection.prepareStatement("""
                             UPDATE products SET stock_level = stock_level - ?, updated_at = ? WHERE product_id = ?
                             """)) {
@@ -1080,6 +1138,7 @@ final class Database {
                 connection.commit();
                 return Map.of("message", "Order created", "orderId", orderId, "invoice", invoice, "totalAmount", totalAmount);
             } catch (SQLException ex) {
+                // if sql Exception arises, rollback all sql and then throw ex
                 connection.rollback();
                 throw ex;
             } finally {
@@ -1148,8 +1207,11 @@ final class Database {
      */
     Map<String, Object> getOrder(Headers headers, long orderId) throws SQLException {
         try (Connection connection = connect()) {
+            // get order by ID and auth
             Map<String, Object> order = getOrderById(connection, orderId);
             AuthContext auth = resolveAuth(connection, headers);
+
+            // throws exception if merchant trys to view other merchants things
             if ("MERCHANT".equals(auth.role()) && !Objects.equals(auth.merchantId(), order.get("merchant_id"))) {
                 throw new ApiException(403, "Merchants can only view their own orders");
             }
@@ -1188,21 +1250,27 @@ final class Database {
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> updateOrderStatus(long orderId, Map<String, Object> body) throws SQLException {
+        // checks status is valid
         String newStatus = JsonUtil.requireUpper(body, "status");
         if (!List.of("ACCEPTED", "PROCESSING", "DISPATCHED", "DELIVERED").contains(newStatus)) {
             throw new ApiException(400, "Invalid order status");
         }
+        // updates if dispatched is new status
         if ("DISPATCHED".equals(newStatus)) {
             JsonUtil.requireString(body, "courier");
             JsonUtil.requireString(body, "trackingNumber");
             JsonUtil.requireString(body, "expectedDelivery");
         }
+
         try (Connection connection = connect()) {
             Map<String, Object> order = getOrderById(connection, orderId);
             String currentStatus = Objects.toString(order.get("status"), "ACCEPTED");
+
+            // check if valid order transition, if not throw error
             if (!isValidOrderTransition(currentStatus, newStatus)) {
                 throw new ApiException(400, "Invalid order transition from " + currentStatus + " to " + newStatus);
             }
+            // create sql statement and add releveant data
             try (PreparedStatement ps = connection.prepareStatement("""
                     UPDATE orders
                     SET status = ?, dispatched_by = COALESCE(?, dispatched_by),
@@ -1220,6 +1288,8 @@ final class Database {
                 ps.setString(7, newStatus);
                 ps.setString(8, "DELIVERED".equals(newStatus) ? now() : null);
                 ps.setLong(9, orderId);
+
+                // throws exception if order cannot be found
                 if (ps.executeUpdate() == 0) {
                     throw new ApiException(404, "Order not found");
                 }
@@ -1257,16 +1327,24 @@ final class Database {
     List<Map<String, Object>> listInvoices(Headers headers, Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
+
+            // begins creating sql statement
             StringBuilder sql = new StringBuilder("SELECT * FROM invoices WHERE 1 = 1");
             List<Object> params = new ArrayList<>();
             String merchantId = query.get("merchantId");
+
+            // if user merchant retrieve ID
             if ("MERCHANT".equals(auth.role())) {
                 merchantId = auth.merchantId();
             }
+
+            // if user is merchant only retreive invoices from that merchant
             if (merchantId != null && !merchantId.isBlank()) {
                 sql.append(" AND merchant_id = ?");
                 params.add(merchantId);
             }
+
+            // bound by times if requested
             if (query.containsKey("start")) {
                 sql.append(" AND issue_date >= ?");
                 params.add(query.get("start"));
@@ -1275,6 +1353,8 @@ final class Database {
                 sql.append(" AND issue_date <= ?");
                 params.add(query.get("end"));
             }
+
+            // order invoices by ID and run statement
             sql.append(" ORDER BY invoice_id DESC");
             try (PreparedStatement ps = connection.prepareStatement(sql.toString())) {
                 for (int i = 0; i < params.size(); i++) {
@@ -1300,10 +1380,12 @@ final class Database {
      */
     Map<String, Object> getInvoice(Headers headers, long invoiceId) throws SQLException {
         try (Connection connection = connect();
+            // creates sql statement and adds relevent data
              PreparedStatement ps = connection.prepareStatement("SELECT * FROM invoices WHERE invoice_id = ?")) {
             AuthContext auth = resolveAuth(connection, headers);
             ps.setLong(1, invoiceId);
             try (ResultSet rs = ps.executeQuery()) {
+                // throws error if invoice does not exist
                 if (!rs.next()) {
                     throw new ApiException(404, "Invoice not found");
                 }
@@ -1329,11 +1411,13 @@ final class Database {
      */
     List<Map<String, Object>> listPayments(Map<String, String> query) throws SQLException {
         try (Connection connection = connect()) {
+            // creates sql and adds relevent data
             String sql = query.containsKey("merchantId")
                     ? "SELECT * FROM payments WHERE merchant_id = ? ORDER BY payment_id DESC"
                     : "SELECT * FROM payments ORDER BY payment_id DESC";
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 if (query.containsKey("merchantId")) {
+                    // filters by merchant id if requested
                     ps.setString(1, query.get("merchantId"));
                 }
                 try (ResultSet rs = ps.executeQuery()) {
@@ -1357,9 +1441,13 @@ final class Database {
     Map<String, Object> recordPayment(Map<String, Object> body) throws SQLException {
         String merchantId = JsonUtil.requireString(body, "merchantId");
         double amount = JsonUtil.requireDouble(body, "amount");
+
+        // throws error if ammount less than or equal to 0
         if (amount <= 0) {
             throw new ApiException(400, "amount must be greater than 0");
         }
+
+        // throws error if payment is invalid type
         String method = JsonUtil.requireUpper(body, "method");
         if (!List.of("BANK_TRANSFER", "CARD", "CHEQUE").contains(method)) {
             throw new ApiException(400, "method must be BANK_TRANSFER, CARD or CHEQUE");
@@ -1367,6 +1455,7 @@ final class Database {
         try (Connection connection = connect()) {
             connection.setAutoCommit(false);
             try {
+                // creates sql statement and adds relevent data
                 long paymentId;
                 try (PreparedStatement insert = connection.prepareStatement("""
                         INSERT INTO payments (merchant_id, amount, method, reference, payment_date, notes)
@@ -1385,12 +1474,14 @@ final class Database {
                     }
                 }
 
+                // apply payment to invoice and updates merchant ballance
                 applyPaymentToInvoices(connection, merchantId, amount);
                 updateMerchantBalance(connection, merchantId);
                 Map<String, Object> evaluation = evaluateMerchantAccount(connection, merchantId);
                 connection.commit();
                 return Map.of("message", "Payment recorded", "paymentId", paymentId, "accountEvaluation", evaluation);
             } catch (SQLException ex) {
+                // if error caught roll back sql and throw exception
                 connection.rollback();
                 throw ex;
             } finally {
@@ -1412,6 +1503,7 @@ final class Database {
     Map<String, Object> turnoverReport(Map<String, String> query) throws SQLException {
         Range range = requiredRange(query);
         try (Connection connection = connect();
+             // creates report sql query and adds relevant data
              PreparedStatement ps = connection.prepareStatement("""
                      SELECT p.product_id, p.name, SUM(oi.quantity) AS quantity_sold, SUM(oi.line_total) AS revenue
                      FROM order_items oi
@@ -1443,6 +1535,7 @@ final class Database {
     Map<String, Object> stockTurnoverReport(Map<String, String> query) throws SQLException {
         Range range = requiredRange(query);
         try (Connection connection = connect();
+             //creates stock turnover report sql query and adds relevent data
              PreparedStatement ps = connection.prepareStatement("""
                      SELECT p.product_id, p.name,
                             SUM(CASE WHEN sm.movement_type = 'SALE' THEN sm.quantity ELSE 0 END) AS sold_quantity,
@@ -1649,6 +1742,7 @@ final class Database {
     Map<String, Object> createNonCommercialApplication(Map<String, Object> body) throws SQLException {
         long applicationId;
         try (Connection connection = connect();
+             // creates sql statement and adds relevant data
              PreparedStatement ps = connection.prepareStatement("""
                      INSERT INTO non_commercial_applications (email, status, created_at)
                      VALUES (?, 'PENDING', ?)
@@ -1699,19 +1793,24 @@ final class Database {
             connection.setAutoCommit(false);
             try {
                 String email;
+                // creates sql statement to retrieve email
                 try (PreparedStatement find = connection.prepareStatement("SELECT email FROM non_commercial_applications WHERE application_id = ?")) {
                     find.setLong(1, applicationId);
                     try (ResultSet rs = find.executeQuery()) {
                         if (!rs.next()) {
+                            // throws error if application not found
                             throw new ApiException(404, "Application not found");
                         }
                         email = rs.getString(1);
                     }
                 }
+                // creates temporary password
                 String password = approved ? "PU!" + applicationId + "Ab9$" : null;
                 String message = approved
                         ? "Approved. Temporary password: " + password
                         : "Rejected. Please contact InfoPharma support if you need clarification.";
+
+                // creates sql statement to store outcomes and status
                 try (PreparedStatement update = connection.prepareStatement("""
                         UPDATE non_commercial_applications
                         SET status = ?, generated_password = ?, outcome_message = ?, processed_at = ?
@@ -1724,10 +1823,12 @@ final class Database {
                     update.setLong(5, applicationId);
                     update.executeUpdate();
                 }
+                // logs email
                 logEmail(connection, email, approved ? "IPOS-PU membership approved" : "IPOS-PU membership rejected", message);
                 connection.commit();
                 return Map.of("message", "Application processed", "emailLogged", true);
             } catch (SQLException ex) {
+                // if error caught roll back sql and throw exception
                 connection.rollback();
                 throw ex;
             } finally {
@@ -1746,6 +1847,7 @@ final class Database {
      */
     private void seed() throws SQLException {
         try (Connection connection = connect()) {
+            // seeds database if database empty
             if (count(connection, "users") == 0) {
                 insertUser(connection, "Sysdba", "London_weighting", "ADMINISTRATOR", null);
                 insertUser(connection, "manager", "Get_it_done", "MANAGER", null);
@@ -1878,12 +1980,15 @@ final class Database {
         Map<String, Object> merchant = getMerchantById(connection, merchantId);
         LocalDate today = LocalDate.now();
         long maxOverdueDays = 0;
+
+        // creates sql statement to merchants with unpaid invoices
         try (PreparedStatement ps = connection.prepareStatement("""
                 SELECT due_date FROM invoices WHERE merchant_id = ? AND status != 'PAID'
                 """)) {
             ps.setString(1, merchantId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    // checks if merchant is overdue
                     LocalDate dueDate = LocalDate.parse(rs.getString(1));
                     if (dueDate.isBefore(today)) {
                         maxOverdueDays = Math.max(maxOverdueDays, ChronoUnit.DAYS.between(dueDate, today));
@@ -1891,6 +1996,8 @@ final class Database {
                 }
             }
         }
+
+        // updates status based on how long the payment is overdue
         String currentStatus = Objects.toString(merchant.get("account_status"), "NORMAL");
         String newStatus = currentStatus;
         List<String> warnings = new ArrayList<>();
@@ -2830,7 +2937,7 @@ final class Database {
      * Reads all remaining rows from a result set and converts them into a list of maps.
      *
      * @param rs the result set to read
-     * @return a list containing one map per row
+     * @return a map containing one map per row
      * @throws SQLException if the result set cannot be read
      */
     private static Map<String, Object> row(ResultSet rs) throws SQLException {
