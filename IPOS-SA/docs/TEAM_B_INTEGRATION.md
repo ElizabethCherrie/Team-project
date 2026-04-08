@@ -26,8 +26,8 @@ Example request:
 
 ```json
 {
-  "username": "merchant1",
-  "password": "merchant123"
+  "username": "city",
+  "password": "northampton"
 }
 ```
 
@@ -35,9 +35,9 @@ Example response:
 
 ```json
 {
-  "username": "merchant1",
+  "username": "city",
   "role": "MERCHANT",
-  "merchantId": "M0001",
+  "merchantId": "ACC0001",
   "sessionToken": "..."
 }
 ```
@@ -94,7 +94,7 @@ Example request:
 
 ```json
 {
-  "merchantId": "M0001",
+  "merchantId": "ACC0001",
   "items": [
     { "productId": "10000001", "quantity": 5 },
     { "productId": "10000003", "quantity": 2 }
@@ -111,7 +111,7 @@ Notes:
 
 ### List Orders
 
-`GET /api/orders?merchantId=M0001`
+`GET /api/orders?merchantId=ACC0001`
 
 For merchant users, `IPOS-SA` automatically restricts visible orders to the logged-in merchant.
 
@@ -123,7 +123,7 @@ For merchant users, `IPOS-SA` automatically restricts visible orders to the logg
 
 ### List Invoices
 
-`GET /api/invoices?merchantId=M0001`
+`GET /api/invoices?merchantId=ACC0001`
 
 ### Get One Invoice
 

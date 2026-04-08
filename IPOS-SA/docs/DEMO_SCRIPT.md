@@ -15,11 +15,11 @@ http://localhost:8080/login.html
 
 5. Keep these seeded logins ready:
 
-- `admin / admin123`
-- `manager / manager123`
-- `ops / ops123`
-- `accounts / accounts123`
-- `merchant1 / merchant123`
+- `Sysdba / London_weighting`
+- `manager / Get_it_done`
+- `delivery / Too_dark`
+- `accountant / Count_money`
+- `city / northampton`
 
 ## Demo Flow
 
@@ -27,7 +27,7 @@ http://localhost:8080/login.html
 
 Use:
 
-- `merchant1 / merchant123`
+- `city / northampton`
 
 Show:
 
@@ -54,7 +54,7 @@ Key points to say:
 
 Log in as:
 
-- `ops / ops123`
+- `delivery / Too_dark`
 
 Show:
 
@@ -73,7 +73,7 @@ Then optionally:
 
 Log back in as:
 
-- `merchant1 / merchant123`
+- `city / northampton`
 
 Show:
 
@@ -85,7 +85,7 @@ Show:
 
 Log in as:
 
-- `accounts / accounts123`
+- `accountant / Count_money`
 
 Show:
 
@@ -97,7 +97,7 @@ Show:
 
 Log in as:
 
-- `manager / manager123`
+- `manager / Get_it_done`
 
 Show:
 

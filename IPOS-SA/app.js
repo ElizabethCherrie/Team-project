@@ -159,6 +159,9 @@ const roleModules = {
       fields: [
         ["productId", "Product ID", "90000001"],
         ["name", "Product Name", "Demo Syrup"],
+        ["packageType", "Package Type", "Box"],
+        ["unit", "Unit", "Caps"],
+        ["unitsInPack", "Units In Pack", "20"],
         ["unitPrice", "Unit Price", "9.99"],
         ["stockLevel", "Stock Level", "35"],
         ["minimumStockLevel", "Minimum Stock", "10"],
@@ -188,10 +191,10 @@ const roleModules = {
       pill: "Manager",
       desc: "Modify merchant records and settings.",
       fields: [
-        ["merchantId", "Merchant ID", "M0001"],
-        ["name", "Name", "CosyMed Pharmacy"],
-        ["email", "Email", "orders@cosymedpharmacy.co.uk"],
-        ["address", "Address", "22 High Street, London"],
+        ["merchantId", "Merchant ID", "ACC0002"],
+        ["name", "Name", "Cosymed Ltd"],
+        ["email", "Email", "cosymed@example.com"],
+        ["address", "Address", "25, Bond Street, London WC1V 8LS"],
         ["creditLimit", "Credit Limit", "5000"],
         ["discountType", "Discount Type", "FIXED"],
         ["fixedDiscountRate", "Fixed Discount Rate", "3"],
@@ -206,7 +209,7 @@ const roleModules = {
       pill: "Manager",
       desc: "Reporting and invoice actions.",
       fields: [
-        ["merchantId", "Merchant ID", "M0001"],
+        ["merchantId", "Merchant ID", "ACC0003"],
         ["invoiceId", "Invoice ID", "1"],
         ["start", "Start", "2026-03-01"],
         ["end", "End", "2026-03-31"],
@@ -222,7 +225,12 @@ const roleModules = {
       pill: "Manager",
       desc: "Non-commercial application decisions from the portal.",
       fields: [
-        ["applicationEmail", "New Application Email", "public@example.com"],
+        ["applicationEmail", "New Application Email", "cool1@example.com"],
+        ["memberType", "Member Type", "NON_COMMERCIAL"],
+        ["accountNo", "Account No", "PU0004"],
+        ["companyName", "Company Name", "Pond Pharmacy"],
+        ["companyAddress", "Company Address", "Chislehurst, 25 High Street, BR7 5BN"],
+        ["companyRegistration", "Company Registration", "UK10003429CompH"],
         ["applicationId", "Application ID", "1"],
       ],
       buttons: [
@@ -244,7 +252,7 @@ const roleModules = {
         ["courier", "Courier", "DHL"],
         ["trackingNumber", "Tracking Number", "DHL-1001"],
         ["expectedDelivery", "Expected Delivery", "2026-03-28"],
-        ["dispatchedBy", "Dispatched By", "ops"],
+        ["dispatchedBy", "Dispatched By", "delivery"],
       ],
       buttons: [
         ["Enter Dispatch Details", "updateOrderStatus"],
@@ -259,7 +267,7 @@ const roleModules = {
       pill: "Accounting",
       desc: "Record merchant payments in different payment modes.",
       fields: [
-        ["merchantId", "Merchant ID", "M0001"],
+        ["merchantId", "Merchant ID", "ACC0003"],
         ["amount", "Amount", "15.50"],
         ["method", "Method", "CARD"],
         ["reference", "Reference", "CARD-1002"],
@@ -277,7 +285,7 @@ const roleModules = {
       pill: "Merchant",
       desc: "Merchant order, invoice, and account actions.",
       fields: [
-        ["merchantId", "Merchant ID", "M0001"],
+        ["merchantId", "Merchant ID", "ACC0001"],
         ["invoiceId", "Invoice ID", "1"],
         ["search", "Keyword", "para"],
         ["orderJson", "Order Items JSON", '[{"productId":"10000001","quantity":5},{"productId":"10000003","quantity":2}]', "textarea"],
@@ -507,7 +515,17 @@ async function runAction(action, form, label) {
         result = await apiRequest("/reports/debtor-reminders");
         break;
       case "createApplication":
-        result = await apiRequest("/non-commercial-applications", { method: "POST", body: { email: values.applicationEmail } });
+        result = await apiRequest("/non-commercial-applications", {
+          method: "POST",
+          body: {
+            email: values.applicationEmail,
+            memberType: values.memberType,
+            accountNo: values.accountNo,
+            companyName: values.companyName,
+            companyAddress: values.companyAddress,
+            companyRegistration: values.companyRegistration,
+          },
+        });
         break;
       case "listApplications":
         result = await apiRequest("/non-commercial-applications");

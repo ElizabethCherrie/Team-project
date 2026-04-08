@@ -91,6 +91,9 @@ final class Database {
                     CREATE TABLE IF NOT EXISTS products (
                         product_id TEXT PRIMARY KEY,
                         name TEXT NOT NULL,
+                        package_type TEXT,
+                        unit TEXT,
+                        units_in_pack INTEGER,
                         unit_price REAL NOT NULL,
                         stock_level INTEGER NOT NULL,
                         minimum_stock_level INTEGER NOT NULL,
@@ -180,6 +183,11 @@ final class Database {
                     CREATE TABLE IF NOT EXISTS non_commercial_applications (
                         application_id INTEGER PRIMARY KEY AUTOINCREMENT,
                         email TEXT NOT NULL,
+                        member_type TEXT,
+                        account_no TEXT,
+                        company_name TEXT,
+                        company_address TEXT,
+                        company_registration TEXT,
                         status TEXT NOT NULL,
                         generated_password TEXT,
                         outcome_message TEXT,
@@ -199,6 +207,14 @@ final class Database {
                     """);
             ensureColumn(statement, "non_commercial_applications", "decided_at", "TEXT");
             ensureColumn(statement, "non_commercial_applications", "notes", "TEXT");
+            ensureColumn(statement, "products", "package_type", "TEXT");
+            ensureColumn(statement, "products", "unit", "TEXT");
+            ensureColumn(statement, "products", "units_in_pack", "INTEGER");
+            ensureColumn(statement, "non_commercial_applications", "member_type", "TEXT");
+            ensureColumn(statement, "non_commercial_applications", "account_no", "TEXT");
+            ensureColumn(statement, "non_commercial_applications", "company_name", "TEXT");
+            ensureColumn(statement, "non_commercial_applications", "company_address", "TEXT");
+            ensureColumn(statement, "non_commercial_applications", "company_registration", "TEXT");
         }
         // runs seed function to populate db with initial data
         seed();
@@ -867,17 +883,23 @@ final class Database {
         try (Connection connection = connect();
              // creates sql statement and adds all relevent data and then executes it and thats about it.
              PreparedStatement ps = connection.prepareStatement("""
-                     INSERT INTO products (product_id, name, unit_price, stock_level, minimum_stock_level, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)
+                     INSERT INTO products (
+                         product_id, name, package_type, unit, units_in_pack,
+                         unit_price, stock_level, minimum_stock_level, created_at, updated_at
+                     )
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      """)) {
             String now = now();
             ps.setString(1, JsonUtil.requireString(body, "productId"));
             ps.setString(2, JsonUtil.requireString(body, "name"));
-            ps.setDouble(3, JsonUtil.requireDouble(body, "unitPrice"));
-            ps.setInt(4, JsonUtil.requireInt(body, "stockLevel"));
-            ps.setInt(5, JsonUtil.requireInt(body, "minimumStockLevel"));
-            ps.setString(6, now);
-            ps.setString(7, now);
+            ps.setString(3, JsonUtil.optionalString(body, "packageType"));
+            ps.setString(4, JsonUtil.optionalString(body, "unit"));
+            setNullable(ps, 5, body.containsKey("unitsInPack") ? JsonUtil.requireInt(body, "unitsInPack") : null);
+            ps.setDouble(6, JsonUtil.requireDouble(body, "unitPrice"));
+            ps.setInt(7, JsonUtil.requireInt(body, "stockLevel"));
+            ps.setInt(8, JsonUtil.requireInt(body, "minimumStockLevel"));
+            ps.setString(9, now);
+            ps.setString(10, now);
             ps.executeUpdate();
         }
         return Map.of("message", "Product created");
@@ -899,6 +921,9 @@ final class Database {
              PreparedStatement ps = connection.prepareStatement("""
                      UPDATE products
                      SET name = COALESCE(?, name),
+                         package_type = COALESCE(?, package_type),
+                         unit = COALESCE(?, unit),
+                         units_in_pack = COALESCE(?, units_in_pack),
                          unit_price = COALESCE(?, unit_price),
                          stock_level = COALESCE(?, stock_level),
                          minimum_stock_level = COALESCE(?, minimum_stock_level),
@@ -906,11 +931,14 @@ final class Database {
                      WHERE product_id = ?
                      """)) {
             setNullable(ps, 1, body.get("name"));
-            setNullable(ps, 2, body.containsKey("unitPrice") ? JsonUtil.requireDouble(body, "unitPrice") : null);
-            setNullable(ps, 3, body.containsKey("stockLevel") ? JsonUtil.requireInt(body, "stockLevel") : null);
-            setNullable(ps, 4, body.containsKey("minimumStockLevel") ? JsonUtil.requireInt(body, "minimumStockLevel") : null);
-            ps.setString(5, now());
-            ps.setString(6, productId);
+            setNullable(ps, 2, body.containsKey("packageType") ? JsonUtil.optionalString(body, "packageType") : null);
+            setNullable(ps, 3, body.containsKey("unit") ? JsonUtil.optionalString(body, "unit") : null);
+            setNullable(ps, 4, body.containsKey("unitsInPack") ? JsonUtil.requireInt(body, "unitsInPack") : null);
+            setNullable(ps, 5, body.containsKey("unitPrice") ? JsonUtil.requireDouble(body, "unitPrice") : null);
+            setNullable(ps, 6, body.containsKey("stockLevel") ? JsonUtil.requireInt(body, "stockLevel") : null);
+            setNullable(ps, 7, body.containsKey("minimumStockLevel") ? JsonUtil.requireInt(body, "minimumStockLevel") : null);
+            ps.setString(8, now());
+            ps.setString(9, productId);
             if (ps.executeUpdate() == 0) {
                 throw new ApiException(404, "Product not found");
             }
@@ -1755,11 +1783,18 @@ final class Database {
         try (Connection connection = connect();
              // creates sql statement and adds relevant data
              PreparedStatement ps = connection.prepareStatement("""
-                     INSERT INTO non_commercial_applications (email, status, created_at)
-                     VALUES (?, 'PENDING', ?)
+                     INSERT INTO non_commercial_applications (
+                         email, member_type, account_no, company_name, company_address, company_registration, status, created_at
+                     )
+                     VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
                      """, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, JsonUtil.requireString(body, "email"));
-            ps.setString(2, now());
+            ps.setString(2, JsonUtil.optionalString(body, "memberType", "NON_COMMERCIAL"));
+            ps.setString(3, JsonUtil.optionalString(body, "accountNo"));
+            ps.setString(4, JsonUtil.optionalString(body, "companyName"));
+            ps.setString(5, JsonUtil.optionalString(body, "companyAddress"));
+            ps.setString(6, JsonUtil.optionalString(body, "companyRegistration"));
+            ps.setString(7, now());
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -1824,14 +1859,16 @@ final class Database {
                 // creates sql statement to store outcomes and status
                 try (PreparedStatement update = connection.prepareStatement("""
                         UPDATE non_commercial_applications
-                        SET status = ?, generated_password = ?, outcome_message = ?, processed_at = ?
+                        SET status = ?, generated_password = ?, outcome_message = ?, processed_at = ?, decided_at = ?, notes = COALESCE(?, notes)
                         WHERE application_id = ?
                         """)) {
                     update.setString(1, approved ? "APPROVED" : "REJECTED");
                     update.setString(2, password);
                     update.setString(3, message);
                     update.setString(4, now());
-                    update.setLong(5, applicationId);
+                    update.setString(5, now());
+                    setNullable(update, 6, body.get("notes"));
+                    update.setLong(7, applicationId);
                     update.executeUpdate();
                 }
                 // logs email
@@ -1883,21 +1920,22 @@ final class Database {
                         5_000, "FLEXIBLE", 0, 0, 1, 3, "2026-02-01T09:10:00");
             }
             if (count(connection, "products") == 0) {
-                seedProduct(connection, "10000001", "Paracetamol", 0.10, 10345, 300);
-                seedProduct(connection, "10000002", "Aspirin", 0.50, 12453, 500);
-                seedProduct(connection, "10000003", "Analgin", 1.20, 4235, 200);
-                seedProduct(connection, "10000004", "Celebrex, caps 100 mg", 10.00, 3420, 200);
-                seedProduct(connection, "10000005", "Celebrex, caps 200 mg", 18.50, 1450, 150);
-                seedProduct(connection, "10000006", "Retin-A Tretin, 30 g", 25.00, 2013, 200);
-                seedProduct(connection, "10000007", "Lipitor TB, 20 mg", 15.50, 1562, 200);
-                seedProduct(connection, "10000008", "Claritin CR, 60g", 19.50, 2540, 200);
-                seedProduct(connection, "20000004", "Iodine tincture", 0.30, 22134, 200);
-                seedProduct(connection, "20000005", "Rhynol", 2.50, 1908, 300);
-                seedProduct(connection, "30000001", "Ospen", 10.50, 809, 200);
-                seedProduct(connection, "30000002", "Amopen", 15.00, 1340, 300);
-                seedProduct(connection, "40000001", "Vitamin C", 1.20, 3258, 300);
-                seedProduct(connection, "40000002", "Vitamin B12", 1.30, 2673, 300);
+                seedProduct(connection, "10000001", "Paracetamol", "Box", "Caps", 20, 0.10, 10345, 300);
+                seedProduct(connection, "10000002", "Aspirin", "Box", "Caps", 20, 0.50, 12453, 500);
+                seedProduct(connection, "10000003", "Analgin", "Box", "Caps", 10, 1.20, 4235, 200);
+                seedProduct(connection, "10000004", "Celebrex, caps 100 mg", "Box", "Caps", 10, 10.00, 3420, 200);
+                seedProduct(connection, "10000005", "Celebrex, caps 200 mg", "Box", "Caps", 10, 18.50, 1450, 150);
+                seedProduct(connection, "10000006", "Retin-A Tretin, 30 g", "Box", "Caps", 20, 25.00, 2013, 200);
+                seedProduct(connection, "10000007", "Lipitor TB, 20 mg", "Box", "Caps", 30, 15.50, 1562, 200);
+                seedProduct(connection, "10000008", "Claritin CR, 60g", "Box", "Caps", 20, 19.50, 2540, 200);
+                seedProduct(connection, "20000004", "Iodine tincture", "Bottle", "Ml", 100, 0.30, 22134, 200);
+                seedProduct(connection, "20000005", "Rhynol", "Bottle", "Ml", 200, 2.50, 1908, 300);
+                seedProduct(connection, "30000001", "Ospen", "Box", "Caps", 20, 10.50, 809, 200);
+                seedProduct(connection, "30000002", "Amopen", "Box", "Caps", 30, 15.00, 1340, 300);
+                seedProduct(connection, "40000001", "Vitamin C", "Box", "Caps", 30, 1.20, 3258, 300);
+                seedProduct(connection, "40000002", "Vitamin B12", "Box", "Caps", 30, 1.30, 2673, 300);
             }
+            backfillProductMetadata(connection);
             if (count(connection, "orders") == 0) {
                 seedHistoricalOrder(connection, "ACC0001", "2026-02-20T09:30:00", "2026-02-23T15:00:00",
                         "delivery", "InfoPharma Courier Service", "INF-SA-0001", "2026-02-23T15:00:00",
@@ -1970,10 +2008,15 @@ final class Database {
                         "2026-03-15", "Full payment cleared by company credit card");
             }
             if (count(connection, "non_commercial_applications") == 0) {
-                seedApplication(connection, "cool@example.com", "APPROVED", "2026-02-25T10:00:00", "2026-02-26T09:00:00", "Imported from IPOS-PU sample data");
-                seedApplication(connection, "cool1@example.com", "PENDING", "2026-02-25T10:05:00", null, "Imported from IPOS-PU sample data");
-                seedApplication(connection, "pondpharma@example.com", "PENDING", "2026-02-25T10:10:00", null, "Commercial member application placeholder imported from IPOS-PU sample data");
+                seedApplication(connection, "cool@example.com", "NON_COMMERCIAL", "PU0001", null, null, null,
+                        "APPROVED", "2026-02-25T10:00:00", "2026-02-26T09:00:00", "Imported from IPOS-PU sample data");
+                seedApplication(connection, "cool1@example.com", "NON_COMMERCIAL", "PU0002", null, null, null,
+                        "PENDING", "2026-02-25T10:05:00", null, "Imported from IPOS-PU sample data");
+                seedApplication(connection, "pondpharma@example.com", "COMMERCIAL", "PU0003", "Pond Pharmacy",
+                        "Chislehurst, 25 High Street, BR7 5BN", "UK10003429CompH",
+                        "PENDING", "2026-02-25T10:10:00", null, "Commercial member application imported from IPOS-PU sample data");
             }
+            backfillApplicationMetadata(connection);
         }
     }
 
@@ -2705,16 +2748,109 @@ final class Database {
      * @param notes any notes to attach to the application
      * @throws SQLException if a database access error occurs
      */
-    private void seedApplication(Connection connection, String email, String status, String createdAt, String decisionAt, String notes) throws SQLException {
+    private void seedApplication(Connection connection, String email, String memberType, String accountNo,
+                                 String companyName, String companyAddress, String companyRegistration,
+                                 String status, String createdAt, String decisionAt, String notes) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
-                INSERT INTO non_commercial_applications (email, status, created_at, decided_at, notes)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO non_commercial_applications (
+                    email, member_type, account_no, company_name, company_address, company_registration,
+                    status, created_at, decided_at, notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             ps.setString(1, email);
-            ps.setString(2, status);
-            ps.setString(3, createdAt);
-            setNullable(ps, 4, decisionAt);
-            ps.setString(5, notes);
+            ps.setString(2, memberType);
+            ps.setString(3, accountNo);
+            ps.setString(4, companyName);
+            ps.setString(5, companyAddress);
+            ps.setString(6, companyRegistration);
+            ps.setString(7, status);
+            ps.setString(8, createdAt);
+            setNullable(ps, 9, decisionAt);
+            ps.setString(10, notes);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Backfills product metadata for databases created before the richer Appendix 9.1 fields existed.
+     *
+     * @param connection the active database connection to use
+     * @throws SQLException if a database access error occurs
+     */
+    private void backfillProductMetadata(Connection connection) throws SQLException {
+        record ProductMeta(String packageType, String unit, int unitsInPack) {}
+        Map<String, ProductMeta> metadata = Map.ofEntries(
+                Map.entry("10000001", new ProductMeta("Box", "Caps", 20)),
+                Map.entry("10000002", new ProductMeta("Box", "Caps", 20)),
+                Map.entry("10000003", new ProductMeta("Box", "Caps", 10)),
+                Map.entry("10000004", new ProductMeta("Box", "Caps", 10)),
+                Map.entry("10000005", new ProductMeta("Box", "Caps", 10)),
+                Map.entry("10000006", new ProductMeta("Box", "Caps", 20)),
+                Map.entry("10000007", new ProductMeta("Box", "Caps", 30)),
+                Map.entry("10000008", new ProductMeta("Box", "Caps", 20)),
+                Map.entry("20000004", new ProductMeta("Bottle", "Ml", 100)),
+                Map.entry("20000005", new ProductMeta("Bottle", "Ml", 200)),
+                Map.entry("30000001", new ProductMeta("Box", "Caps", 20)),
+                Map.entry("30000002", new ProductMeta("Box", "Caps", 30)),
+                Map.entry("40000001", new ProductMeta("Box", "Caps", 30)),
+                Map.entry("40000002", new ProductMeta("Box", "Caps", 30))
+        );
+        try (PreparedStatement ps = connection.prepareStatement("""
+                UPDATE products
+                SET package_type = COALESCE(package_type, ?),
+                    unit = COALESCE(unit, ?),
+                    units_in_pack = COALESCE(units_in_pack, ?),
+                    updated_at = ?
+                WHERE product_id = ?
+                """)) {
+            String updatedAt = now();
+            for (Map.Entry<String, ProductMeta> entry : metadata.entrySet()) {
+                ps.setString(1, entry.getValue().packageType());
+                ps.setString(2, entry.getValue().unit());
+                ps.setInt(3, entry.getValue().unitsInPack());
+                ps.setString(4, updatedAt);
+                ps.setString(5, entry.getKey());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+    }
+
+    /**
+     * Backfills application metadata for sample application rows created before the richer fields existed.
+     *
+     * @param connection the active database connection to use
+     * @throws SQLException if a database access error occurs
+     */
+    private void backfillApplicationMetadata(Connection connection) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                UPDATE non_commercial_applications
+                SET member_type = COALESCE(member_type, CASE
+                        WHEN application_id IN (1, 2) THEN 'NON_COMMERCIAL'
+                        WHEN application_id = 3 THEN 'COMMERCIAL'
+                        ELSE member_type
+                    END),
+                    account_no = COALESCE(account_no, CASE
+                        WHEN application_id = 1 THEN 'PU0001'
+                        WHEN application_id = 2 THEN 'PU0002'
+                        WHEN application_id = 3 THEN 'PU0003'
+                        ELSE account_no
+                    END),
+                    company_name = COALESCE(company_name, CASE
+                        WHEN application_id = 3 THEN 'Pond Pharmacy'
+                        ELSE company_name
+                    END),
+                    company_address = COALESCE(company_address, CASE
+                        WHEN application_id = 3 THEN 'Chislehurst, 25 High Street, BR7 5BN'
+                        ELSE company_address
+                    END),
+                    company_registration = COALESCE(company_registration, CASE
+                        WHEN application_id = 3 THEN 'UK10003429CompH'
+                        ELSE company_registration
+                    END),
+                    notes = COALESCE(notes, 'Imported from IPOS-PU sample data')
+                """)) {
             ps.executeUpdate();
         }
     }
@@ -2732,19 +2868,26 @@ final class Database {
      * @param minimumStock the minimum stock threshold
      * @throws SQLException if a database access error occurs
      */
-    private void seedProduct(Connection connection, String id, String name, double price, int stock, int minimumStock) throws SQLException {
+    private void seedProduct(Connection connection, String id, String name, String packageType, String unit, int unitsInPack,
+                             double price, int stock, int minimumStock) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
-                INSERT INTO products (product_id, name, unit_price, stock_level, minimum_stock_level, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (
+                    product_id, name, package_type, unit, units_in_pack,
+                    unit_price, stock_level, minimum_stock_level, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             String now = now();
             ps.setString(1, id);
             ps.setString(2, name);
-            ps.setDouble(3, price);
-            ps.setInt(4, stock);
-            ps.setInt(5, minimumStock);
-            ps.setString(6, now);
-            ps.setString(7, now);
+            ps.setString(3, packageType);
+            ps.setString(4, unit);
+            ps.setInt(5, unitsInPack);
+            ps.setDouble(6, price);
+            ps.setInt(7, stock);
+            ps.setInt(8, minimumStock);
+            ps.setString(9, now);
+            ps.setString(10, now);
             ps.executeUpdate();
         }
     }
