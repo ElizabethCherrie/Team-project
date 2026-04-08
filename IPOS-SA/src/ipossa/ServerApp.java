@@ -62,7 +62,8 @@ public final class ServerApp {
     static HttpServer startServer(int port, Path dbPath, Path staticRoot) throws Exception {
         Class.forName("org.sqlite.JDBC");
 
-        Database database = new Database(dbPath);
+        IntegrationClient integrationClient = IntegrationClient.fromEnvironment();
+        Database database = new Database(dbPath, integrationClient);
         database.bootstrap();
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -73,7 +74,8 @@ public final class ServerApp {
         System.out.println("IPOS-SA REST API started on port " + port);
         System.out.println("SQLite database: " + dbPath);
         System.out.println("Static frontend root: " + staticRoot);
-        System.out.println("Default users: admin/admin123, manager/manager123, ops/ops123, accounts/accounts123, merchant1/merchant123");
+        System.out.println("Seeded users: Sysdba/London_weighting, manager/Get_it_done, accountant/Count_money, delivery/Too_dark, city/northampton");
+        System.out.println("Integration config: " + integrationClient.describeConfiguration());
         return server;
     }
 }

@@ -32,14 +32,16 @@ import java.util.UUID;
  */
 final class Database {
     private final Path dbPath;
+    private final IntegrationClient integrationClient;
 
     /**
      * Creates a database service for the supplied SQLite database file.
      *
      * @param dbPath the path to the SQLite database file
      */
-    Database(Path dbPath) {
+    Database(Path dbPath, IntegrationClient integrationClient) {
         this.dbPath = dbPath;
+        this.integrationClient = integrationClient;
     }
 
     /**
@@ -195,6 +197,8 @@ final class Database {
                         FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
                     )
                     """);
+            ensureColumn(statement, "non_commercial_applications", "decided_at", "TEXT");
+            ensureColumn(statement, "non_commercial_applications", "notes", "TEXT");
         }
         // runs seed function to populate db with initial data
         seed();
@@ -1294,8 +1298,15 @@ final class Database {
                     throw new ApiException(404, "Order not found");
                 }
             }
+            Map<String, Object> updatedOrder = getOrderById(connection, orderId);
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("message", "Order status updated");
+            response.put("status", newStatus);
+            if ("DELIVERED".equals(newStatus)) {
+                response.put("integration", integrationClient.notifyCaDelivery(updatedOrder, deliverySyncItems(connection, orderId)));
+            }
+            return response;
         }
-        return Map.of("message", "Order status updated", "status", newStatus);
     }
 
     /**
@@ -2483,6 +2494,27 @@ final class Database {
     }
 
     /**
+     * Builds the compact item list used for SA-to-CA delivery synchronization.
+     *
+     * @param connection the active database connection to use
+     * @param orderId the delivered order identifier
+     * @return a list of product ID, name, and quantity maps
+     * @throws SQLException if a database access error occurs
+     */
+    private List<Map<String, Object>> deliverySyncItems(Connection connection, long orderId) throws SQLException {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (Map<String, Object> item : getOrderItems(connection, orderId)) {
+            Map<String, Object> product = getProductById(connection, Objects.toString(item.get("product_id")));
+            Map<String, Object> syncItem = new LinkedHashMap<>();
+            syncItem.put("productId", item.get("product_id"));
+            syncItem.put("name", product.get("name"));
+            syncItem.put("quantity", item.get("quantity"));
+            items.add(syncItem);
+        }
+        return items;
+    }
+
+    /**
      * Builds a printable text representation of an invoice.
      * <p>
      * The output includes the invoice identifier, each order item with quantity, unit price, and line
@@ -2787,6 +2819,26 @@ final class Database {
              ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
             return rs.next() ? rs.getInt(1) : 0;
         }
+    }
+
+    /**
+     * Ensures that a table contains a required column, adding it if missing.
+     *
+     * @param statement the statement to use for schema inspection and migration
+     * @param table the table name to inspect
+     * @param column the required column name
+     * @param definition the SQL column definition to add when missing
+     * @throws SQLException if schema inspection or alteration fails
+     */
+    private void ensureColumn(Statement statement, String table, String column, String definition) throws SQLException {
+        try (ResultSet rs = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return;
+                }
+            }
+        }
+        statement.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
     }
 
     /**
