@@ -39,36 +39,41 @@ final class ApiHandler implements HttpHandler {
         this.db = db;
         this.staticRoot = staticRoot.normalize();
     }
+    
 
     @Override
-
-
     public void handle(HttpExchange exchange) throws IOException {
         try {
             String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
             if ("OPTIONS".equalsIgnoreCase(method)) {
+                // Reply to CORS preflight requests without processing a route.
                 writeJson(exchange, 204, Map.of());
                 return;
             }
             if ("/health".equals(path)) {
+                // Expose a lightweight liveness check for monitoring.
                 writeJson(exchange, 200, Map.of("status", "ok", "service", "IPOS-SA"));
                 return;
             }
             if (!path.startsWith("/api/")) {
+                // Treat non-API paths as frontend asset requests.
                 serveStatic(exchange, path);
                 return;
             }
             List<String> parts = splitPath(path.substring(5));
             if (parts.isEmpty()) {
+                // Return a simple index when the API root is requested.
                 writeJson(exchange, 200, Map.of("service", "IPOS-SA", "routes", List.of("auth", "users", "merchants", "products", "orders", "invoices", "payments", "reports", "non-commercial-applications")));
                 return;
             }
             route(exchange, method, parts);
         } catch (ApiException ex) {
+            // Preserve intended status codes for known API failures.
             writeJson(exchange, ex.statusCode, Map.of("error", ex.getMessage()));
         } catch (Exception ex) {
             ex.printStackTrace();
+            // Hide unexpected failures behind a generic server response.
             writeJson(exchange, 500, Map.of("error", ex.getMessage() == null ? "Internal server error" : ex.getMessage()));
         } finally {
             exchange.close();
@@ -84,6 +89,7 @@ final class ApiHandler implements HttpHandler {
      * @throws Exception if the selected route handler fails
      */
     private void route(HttpExchange exchange, String method, List<String> parts) throws Exception {
+        // Dispatch by the first segment after /api/.
         switch (parts.get(0)) {
             case "auth" -> handleAuth(exchange, method, parts);
             case "users" -> handleUsers(exchange, method, parts);
@@ -115,6 +121,7 @@ final class ApiHandler implements HttpHandler {
             throw new ApiException(404, "Route not found");
         }
         if ("POST".equals(method) && "login".equals(parts.get(1))) {
+            // Read credentials once before validating required fields.
             Map<String, Object> body = body(exchange);
             writeJson(exchange, 200, db.login(JsonUtil.requireString(body, "username"), JsonUtil.requireString(body, "password")));
             return;
@@ -138,6 +145,7 @@ final class ApiHandler implements HttpHandler {
      * @throws Exception if authorization fails, the route is invalid, or the database operation fails
      */
     private void handleUsers(HttpExchange exchange, String method, List<String> parts) throws Exception {
+        // All user routes are restricted to administrators.
         requireRole(exchange, "ADMINISTRATOR");
         if (parts.size() == 1 && "GET".equals(method)) {
             writeJson(exchange, 200, Map.of("users", db.listUsers()));
@@ -182,6 +190,7 @@ final class ApiHandler implements HttpHandler {
             return;
         }
         if (parts.size() >= 2) {
+            // Reuse the merchant id for all nested merchant actions.
             String merchantId = parts.get(1);
             if (parts.size() == 2 && "GET".equals(method)) {
                 requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF", "MERCHANT");
@@ -250,6 +259,7 @@ final class ApiHandler implements HttpHandler {
             return;
         }
         if (parts.size() == 2 && "search".equals(parts.get(1)) && "GET".equals(method)) {
+            // Default to an empty search term if q is not supplied.
             writeJson(exchange, 200, Map.of("products", db.searchProducts(query(exchange).getOrDefault("q", ""))));
             return;
         }
@@ -315,6 +325,7 @@ final class ApiHandler implements HttpHandler {
         }
         if (parts.size() == 2 && "GET".equals(method)) {
             requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF", "MERCHANT");
+            // Order ids are numeric path parameters.
             writeJson(exchange, 200, db.getOrder(exchange.getRequestHeaders(), Long.parseLong(parts.get(1))));
             return;
         }
@@ -394,11 +405,13 @@ final class ApiHandler implements HttpHandler {
      * @throws Exception if authorization fails, the route is invalid, or the database operation fails
      */
     private void handleReports(HttpExchange exchange, String method, List<String> parts) throws Exception {
+        // Report access is centralized here before selecting a specific report.
         requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF");
         if (!"GET".equals(method) || parts.size() != 2) {
             throw new ApiException(404, "Route not found");
         }
         Map<String, String> query = query(exchange);
+        // Delegate report generation based on the second path segment.
         Map<String, Object> result = switch (parts.get(1)) {
             case "turnover" -> db.turnoverReport(query);
             case "stock-turnover" -> db.stockTurnoverReport(query);
@@ -454,6 +467,7 @@ final class ApiHandler implements HttpHandler {
      */
     private Map<String, Object> body(HttpExchange exchange) throws IOException {
         try (InputStream in = exchange.getRequestBody()) {
+            // Read the entire request body before handing it to the JSON parser.
             return JsonUtil.asObject(JsonUtil.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8)));
         }
     }
@@ -478,6 +492,7 @@ final class ApiHandler implements HttpHandler {
                 continue;
             }
             String[] split = pair.split("=", 2);
+            // Allow keys without a value by mapping them to an empty string.
             params.put(URLDecoder.decode(split[0], StandardCharsets.UTF_8), split.length > 1 ? URLDecoder.decode(split[1], StandardCharsets.UTF_8) : "");
         }
         return params;
@@ -510,6 +525,7 @@ final class ApiHandler implements HttpHandler {
         List<String> parts = new ArrayList<>();
         for (String part : path.split("/")) {
             if (!part.isBlank()) {
+                // Ignore empty segments caused by leading or repeated slashes.
                 parts.add(part);
             }
         }
@@ -530,6 +546,7 @@ final class ApiHandler implements HttpHandler {
     private static void writeJson(HttpExchange exchange, int statusCode, Object payload) throws IOException {
         byte[] bytes = JsonUtil.stringify(payload).getBytes(StandardCharsets.UTF_8);
         Headers headers = exchange.getResponseHeaders();
+        // Apply shared response headers to every JSON endpoint.
         headers.set("Content-Type", "application/json; charset=utf-8");
         headers.set("Access-Control-Allow-Origin", "*");
         headers.set("Access-Control-Allow-Headers", "Content-Type, X-Session-Token");
@@ -553,6 +570,7 @@ final class ApiHandler implements HttpHandler {
     private void serveStatic(HttpExchange exchange, String path) throws IOException {
         String requested = path.equals("/") ? "/login.html" : path;
         Path resolved = staticRoot.resolve("." + requested).normalize();
+        // Resolve against the static root to block directory traversal.
         if (!resolved.startsWith(staticRoot) || !Files.exists(resolved) || Files.isDirectory(resolved)) {
             throw new ApiException(404, "Route not found");
         }
@@ -576,6 +594,7 @@ final class ApiHandler implements HttpHandler {
      */
     private static String contentType(Path file) {
         String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        // Keep content types explicit for the frontend assets this app serves.
         if (name.endsWith(".html")) return "text/html; charset=utf-8";
         if (name.endsWith(".css")) return "text/css; charset=utf-8";
         if (name.endsWith(".js")) return "application/javascript; charset=utf-8";
