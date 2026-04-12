@@ -56,15 +56,16 @@ final class ApiHandler implements HttpHandler {
                 writeJson(exchange, 200, Map.of("status", "ok", "service", "IPOS-SA"));
                 return;
             }
-            if (!path.startsWith("/api/")) {
+            if (!"/api".equals(path) && !path.startsWith("/api/")) {
                 // Treat non-API paths as frontend asset requests.
                 serveStatic(exchange, path);
                 return;
             }
-            List<String> parts = splitPath(path.substring(5));
+            String apiSuffix = "/api".equals(path) ? "" : path.substring(5);
+            List<String> parts = splitPath(apiSuffix);
             if (parts.isEmpty()) {
                 // Return a simple index when the API root is requested.
-                writeJson(exchange, 200, Map.of("service", "IPOS-SA", "routes", List.of("auth", "users", "merchants", "products", "orders", "invoices", "payments", "reports", "non-commercial-applications")));
+                writeJson(exchange, 200, Map.of("service", "IPOS-SA", "routes", List.of("auth", "users", "merchants", "products", "orders", "invoices", "payments", "reports", "non-commercial-applications", "integrations")));
                 return;
             }
             route(exchange, method, parts);
@@ -100,6 +101,7 @@ final class ApiHandler implements HttpHandler {
             case "payments" -> handlePayments(exchange, method, parts);
             case "reports" -> handleReports(exchange, method, parts);
             case "non-commercial-applications" -> handleApplications(exchange, method, parts);
+            case "integrations" -> handleIntegrations(exchange, method, parts);
             default -> throw new ApiException(404, "Route not found");
         }
     }
@@ -452,6 +454,38 @@ final class ApiHandler implements HttpHandler {
             requireRole(exchange, "ADMINISTRATOR", "MANAGER");
             writeJson(exchange, 200, db.decideApplication(Long.parseLong(parts.get(1)), body(exchange)));
             return;
+        }
+        throw new ApiException(404, "Route not found");
+    }
+
+    /**
+     * Processes cross-subsystem integration requests and diagnostics.
+     *
+     * <p>This handler exposes the configured integration endpoints and lets privileged
+     * users relay Team C mail and payment requests through Team A's backend during
+     * integration testing and demo rehearsal.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @param method the HTTP request method
+     * @param parts the path segments after the {@code /api/} prefix
+     * @throws Exception if authorization fails, the route is invalid, or the relay cannot be processed
+     */
+    private void handleIntegrations(HttpExchange exchange, String method, List<String> parts) throws Exception {
+        if (parts.size() == 1 && "GET".equals(method)) {
+            requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF", "OPERATIONS_STAFF");
+            writeJson(exchange, 200, Map.of("integrations", db.describeIntegrations()));
+            return;
+        }
+        if (parts.size() == 3 && "POST".equals(method) && "pu".equals(parts.get(1))) {
+            requireRole(exchange, "ADMINISTRATOR", "MANAGER", "ACCOUNTING_STAFF");
+            if ("mail".equals(parts.get(2))) {
+                writeJson(exchange, 200, db.sendPuMail(body(exchange)));
+                return;
+            }
+            if ("pay".equals(parts.get(2))) {
+                writeJson(exchange, 200, db.sendPuPayment(body(exchange)));
+                return;
+            }
         }
         throw new ApiException(404, "Route not found");
     }

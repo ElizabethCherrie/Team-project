@@ -73,6 +73,9 @@ const actionDescriptions = {
   reportMerchantInvoices: "Generate invoices for one merchant over a period.",
   reportCompanyInvoices: "Generate invoices across all merchants.",
   reportDebtorReminders: "Show current debtor reminders and overdue merchants.",
+  integrationStatus: "Show the configured CA and PU integration endpoints for demo diagnostics.",
+  sendPuMail: "Relay a mail request to Team C's IPOS-PU mail endpoint.",
+  sendPuPayment: "Relay a payment request to Team C's IPOS-PU payment endpoint.",
   createApplication: "Record a new non-commercial application from the portal.",
   listApplications: "View submitted non-commercial applications.",
   approveApplication: "Approve an application and issue credentials.",
@@ -122,6 +125,9 @@ const actionIcons = {
   reportMerchantInvoices: "I",
   reportCompanyInvoices: "C",
   reportDebtorReminders: "D",
+  integrationStatus: "I",
+  sendPuMail: "M",
+  sendPuPayment: "£",
   createApplication: "+",
   listApplications: "A",
   approveApplication: "Y",
@@ -240,6 +246,32 @@ const roleModules = {
         ["Reject Application", "rejectApplication"],
       ],
     },
+    {
+      pill: "Integration",
+      desc: "Inspect and exercise the live subsystem REST links used on demo day.",
+      fields: [
+        ["sender", "Mail Sender", "ipos-sa@londonsoftwarehouse.local"],
+        ["receivers", "Mail Receivers JSON", '["cool@example.com"]', "textarea"],
+        ["subject", "Mail Subject", "IPOS-SA integration test"],
+        ["mailBody", "Mail Body", "Approved. Temporary password issued.", "textarea"],
+        ["amount", "Payment Amount", "29.99"],
+        ["senderName", "Sender Name", "Peter Popov"],
+        ["senderCardNumber", "Sender Card Number", "0000 000000 0000 0001"],
+        ["senderCVV", "Sender CVV", "3245"],
+        ["senderExpiryDate", "Sender Expiry Date", "30/08/2030"],
+        ["senderBillingAddress", "Sender Billing Address", "1 Demo Street, London"],
+        ["senderEmail", "Sender Email", "cool@example.com"],
+        ["receiverName", "Receiver Name", "InfoPharma Ltd"],
+        ["receiverBankName", "Receiver Bank Name", "Demo Bank"],
+        ["receiverAccountNumber", "Receiver Account Number", "12345678"],
+        ["receiverSortCode", "Receiver Sort Code", "12-34-56"],
+      ],
+      buttons: [
+        ["Integration Status", "integrationStatus"],
+        ["Relay PU Mail", "sendPuMail"],
+        ["Relay PU Payment", "sendPuPayment"],
+      ],
+    },
   ],
   OPERATIONS_STAFF: [
     {
@@ -260,6 +292,12 @@ const roleModules = {
         ["Generate Invoice", "generateInvoice"],
         ["View Invoice", "getInvoice"],
       ],
+    },
+    {
+      pill: "Integration",
+      desc: "Review the current subsystem integration targets while demonstrating delivery flow.",
+      fields: [],
+      buttons: [["Integration Status", "integrationStatus"]],
     },
   ],
   ACCOUNTING_STAFF: [
@@ -454,10 +492,10 @@ async function runAction(action, form, label) {
         result = await apiRequest(`/products/${values.productId}`);
         break;
       case "createProduct":
-        result = await apiRequest("/products", { method: "POST", body: { productId: values.productId, name: values.name, unitPrice: Number(values.unitPrice), stockLevel: Number(values.stockLevel), minimumStockLevel: Number(values.minimumStockLevel) } });
+        result = await apiRequest("/products", { method: "POST", body: { productId: values.productId, name: values.name, packageType: values.packageType, unit: values.unit, unitsInPack: Number(values.unitsInPack), unitPrice: Number(values.unitPrice), stockLevel: Number(values.stockLevel), minimumStockLevel: Number(values.minimumStockLevel) } });
         break;
       case "updateProduct":
-        result = await apiRequest(`/products/${values.productId}`, { method: "PUT", body: { name: values.name, unitPrice: Number(values.unitPrice), stockLevel: Number(values.stockLevel), minimumStockLevel: Number(values.minimumStockLevel) } });
+        result = await apiRequest(`/products/${values.productId}`, { method: "PUT", body: { name: values.name, packageType: values.packageType, unit: values.unit, unitsInPack: Number(values.unitsInPack), unitPrice: Number(values.unitPrice), stockLevel: Number(values.stockLevel), minimumStockLevel: Number(values.minimumStockLevel) } });
         break;
       case "deleteProduct":
         result = await apiRequest(`/products/${values.productId}`, { method: "DELETE" });
@@ -513,6 +551,38 @@ async function runAction(action, form, label) {
         break;
       case "reportDebtorReminders":
         result = await apiRequest("/reports/debtor-reminders");
+        break;
+      case "integrationStatus":
+        result = await apiRequest("/integrations");
+        break;
+      case "sendPuMail":
+        result = await apiRequest("/integrations/pu/mail", {
+          method: "POST",
+          body: {
+            sender: values.sender,
+            receivers: JSON.parse(values.receivers),
+            subject: values.subject,
+            body: values.mailBody,
+          },
+        });
+        break;
+      case "sendPuPayment":
+        result = await apiRequest("/integrations/pu/pay", {
+          method: "POST",
+          body: {
+            amount: Number(values.amount),
+            senderName: values.senderName,
+            senderCardNumber: values.senderCardNumber,
+            senderCVV: values.senderCVV,
+            senderExpiryDate: values.senderExpiryDate,
+            senderBillingAddress: values.senderBillingAddress,
+            senderEmail: values.senderEmail,
+            receiverName: values.receiverName,
+            receiverBankName: values.receiverBankName,
+            receiverAccountNumber: values.receiverAccountNumber,
+            receiverSortCode: values.receiverSortCode,
+          },
+        });
         break;
       case "createApplication":
         result = await apiRequest("/non-commercial-applications", {

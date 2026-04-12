@@ -88,6 +88,67 @@ Header:
 
 `X-Session-Token: <token>`
 
+## Team C Endpoints Confirmed So Far
+
+Team C has now confirmed these local endpoints on `localhost:8090`:
+
+- `POST http://localhost:8090/mail`
+- `POST http://localhost:8090/pay`
+- `POST http://localhost:8090/order` (still being implemented by Team C)
+
+### Mail contract
+
+`POST http://localhost:8090/mail`
+
+Request body:
+
+```json
+{
+  "sender": "ipos-sa@londonsoftwarehouse.local",
+  "receivers": ["cool@example.com"],
+  "subject": "IPOS-PU membership approved",
+  "body": "Approved. Temporary password: ..."
+}
+```
+
+Team A now uses this mail contract when processing application decisions in `IPOS-SA`.
+
+### Payment contract
+
+`POST http://localhost:8090/pay`
+
+Request body:
+
+```json
+{
+  "amount": 29.99,
+  "senderName": "Peter Popov",
+  "senderCardNumber": "0000 000000 0000 0001",
+  "senderCVV": "3245",
+  "senderExpiryDate": "30/08/2030",
+  "senderBillingAddress": "Example address",
+  "senderEmail": "cool@example.com",
+  "receiverName": "InfoPharma Ltd",
+  "receiverBankName": "Demo Bank",
+  "receiverAccountNumber": "12345678",
+  "receiverSortCode": "12-34-56"
+}
+```
+
+Team A exposes a relay endpoint for this contract at:
+
+`POST /api/integrations/pu/pay`
+
+### Team A integration diagnostics and relay endpoints
+
+To support demo-day integration checks, Team A also exposes:
+
+- `GET /api/integrations`
+- `POST /api/integrations/pu/mail`
+- `POST /api/integrations/pu/pay`
+
+These routes are intended for internal testing and demo verification, not as a replacement for Team C's own application flows.
+
 ## What Team C Appears To Need
 
 From the current `IPOS-PU` source code, Team C already has a registration flow where a selected file is intended to be sent to `IPOS-SA`.
@@ -106,7 +167,8 @@ For the current demo:
 1. Team C submits the applicant email to `IPOS-SA`
 2. Team 28 reviews the application in the manager workflow
 3. Team 28 approves or rejects it in `IPOS-SA`
-4. The result is logged in the `IPOS-SA` application/email flow
+4. The result is logged locally in `IPOS-SA`
+5. When configured, Team A also relays the decision email to Team C's `/mail` endpoint
 
 This is enough to demonstrate subsystem communication without introducing risky file upload work late in the project.
 

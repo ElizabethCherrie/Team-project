@@ -23,6 +23,7 @@ final class IntegrationClient {
     private final String caStockSyncUrl;
     private final String puPaymentUrl;
     private final String puMailUrl;
+    private final int caMarkupRate;
 
     /**
      * Creates the client from runtime configuration.
@@ -30,12 +31,14 @@ final class IntegrationClient {
      * @param caStockSyncUrl the CA stock synchronization endpoint, or blank to disable
      * @param puPaymentUrl the PU payment endpoint, or blank to disable
      * @param puMailUrl the PU mail endpoint, or blank to disable
+     * @param caMarkupRate the markup multiplier expected by IPOS-CA
      */
-    IntegrationClient(String caStockSyncUrl, String puPaymentUrl, String puMailUrl) {
+    IntegrationClient(String caStockSyncUrl, String puPaymentUrl, String puMailUrl, int caMarkupRate) {
         this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
         this.caStockSyncUrl = normalize(caStockSyncUrl);
         this.puPaymentUrl = normalize(puPaymentUrl);
         this.puMailUrl = normalize(puMailUrl);
+        this.caMarkupRate = caMarkupRate <= 0 ? 2 : caMarkupRate;
     }
 
     /**
@@ -47,7 +50,8 @@ final class IntegrationClient {
         return new IntegrationClient(
                 System.getenv().getOrDefault("IPOS_CA_STOCK_SYNC_URL", ""),
                 System.getenv().getOrDefault("IPOS_PU_PAYMENT_URL", ""),
-                System.getenv().getOrDefault("IPOS_PU_MAIL_URL", "")
+                System.getenv().getOrDefault("IPOS_PU_MAIL_URL", ""),
+                parseMarkupRate(System.getenv().getOrDefault("IPOS_CA_MARKUP_RATE", "2"))
         );
     }
 
@@ -67,14 +71,78 @@ final class IntegrationClient {
             );
         }
 
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("merchantId", order.get("merchant_id"));
-        payload.put("sourceOrderId", order.get("order_id"));
-        payload.put("reason", "SA_DELIVERY");
-        payload.put("deliveredAt", order.get("delivered_date"));
-        payload.put("items", items);
+        List<Map<String, Object>> results = new ArrayList<>();
+        boolean allSent = true;
+        for (Map<String, Object> item : items) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("name", item.get("name"));
+            payload.put("packageType", normalizePackageType(item.get("packageType")));
+            payload.put("units", normalizeUnitType(item.get("units")));
+            payload.put("unitsInAPack", item.get("unitsInAPack"));
+            payload.put("bulkCost", item.get("bulkCost"));
+            payload.put("markupRate", caMarkupRate);
+            payload.put("quantity", item.get("quantity"));
+            payload.put("stockLimit", item.get("stockLimit"));
 
-        return postJson("IPOS-CA", caStockSyncUrl, payload);
+            Map<String, Object> result = postJson("IPOS-CA", caStockSyncUrl, payload);
+            result = new LinkedHashMap<>(result);
+            result.put("productId", item.get("productId"));
+            results.add(result);
+            if (!"SENT".equals(result.get("status"))) {
+                allSent = false;
+            }
+        }
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("target", "IPOS-CA");
+        summary.put("status", allSent ? "SENT" : "FAILED");
+        summary.put("url", caStockSyncUrl);
+        summary.put("merchantId", order.get("merchant_id"));
+        summary.put("sourceOrderId", order.get("order_id"));
+        summary.put("results", results);
+        return summary;
+    }
+
+    /**
+     * Sends a mail request to IPOS-PU when configured.
+     *
+     * @param sender the sender label/email to present
+     * @param receivers the recipient list
+     * @param subject the mail subject
+     * @param body the mail body
+     * @return a result map describing whether the callback was sent successfully
+     */
+    Map<String, Object> sendPuMail(String sender, List<String> receivers, String subject, String body) {
+        if (puMailUrl == null) {
+            return Map.of(
+                    "target", "IPOS-PU",
+                    "status", "SKIPPED",
+                    "reason", "No PU mail URL configured"
+            );
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sender", sender);
+        payload.put("receivers", receivers);
+        payload.put("subject", subject);
+        payload.put("body", body);
+        return postJson("IPOS-PU", puMailUrl, payload);
+    }
+
+    /**
+     * Sends a payment request to IPOS-PU when configured.
+     *
+     * @param payload the payment request body already shaped to Team C's contract
+     * @return a result map describing whether the callback was sent successfully
+     */
+    Map<String, Object> sendPuPayment(Map<String, Object> payload) {
+        if (puPaymentUrl == null) {
+            return Map.of(
+                    "target", "IPOS-PU",
+                    "status", "SKIPPED",
+                    "reason", "No PU payment URL configured"
+            );
+        }
+        return postJson("IPOS-PU", puPaymentUrl, payload);
     }
 
     /**
@@ -85,6 +153,7 @@ final class IntegrationClient {
     Map<String, Object> describeConfiguration() {
         return Map.of(
                 "caStockSyncUrl", Objects.toString(caStockSyncUrl, ""),
+                "caMarkupRate", caMarkupRate,
                 "puPaymentUrl", Objects.toString(puPaymentUrl, ""),
                 "puMailUrl", Objects.toString(puMailUrl, "")
         );
@@ -123,5 +192,29 @@ final class IntegrationClient {
             return null;
         }
         return value.trim();
+    }
+
+    private static int parseMarkupRate(String value) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (Exception ignored) {
+            return 2;
+        }
+    }
+
+    private static String normalizePackageType(Object value) {
+        String normalized = Objects.toString(value, "OTHER").trim().toUpperCase().replace('-', '_');
+        return switch (normalized) {
+            case "BOX", "BOTTLE" -> normalized;
+            default -> "BOX";
+        };
+    }
+
+    private static String normalizeUnitType(Object value) {
+        String normalized = Objects.toString(value, "OTHER").trim().toUpperCase().replace('-', '_');
+        return switch (normalized) {
+            case "CAPS", "ML", "OTHER" -> normalized;
+            default -> "OTHER";
+        };
     }
 }

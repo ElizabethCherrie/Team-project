@@ -1530,6 +1530,61 @@ final class Database {
     }
 
     /**
+     * Returns the currently configured cross-subsystem integration endpoints.
+     *
+     * @return a map describing the configured CA and PU integrations
+     */
+    Map<String, Object> describeIntegrations() {
+        return integrationClient.describeConfiguration();
+    }
+
+    /**
+     * Relays a mail request to Team C's IPOS-PU subsystem using the agreed JSON contract.
+     *
+     * @param body a map containing sender, receivers, subject, and body
+     * @return a map describing the relay result
+     */
+    Map<String, Object> sendPuMail(Map<String, Object> body) {
+        String sender = JsonUtil.requireString(body, "sender");
+        List<Object> rawReceivers = JsonUtil.requireArray(body, "receivers");
+        if (rawReceivers.isEmpty()) {
+            throw new ApiException(400, "receivers must contain at least one recipient");
+        }
+        List<String> receivers = new ArrayList<>();
+        for (Object rawReceiver : rawReceivers) {
+            receivers.add(String.valueOf(rawReceiver));
+        }
+        return integrationClient.sendPuMail(
+                sender,
+                receivers,
+                JsonUtil.requireString(body, "subject"),
+                JsonUtil.requireString(body, "body")
+        );
+    }
+
+    /**
+     * Relays a payment request to Team C's IPOS-PU subsystem using the agreed JSON contract.
+     *
+     * @param body a map containing the payment details expected by Team C
+     * @return a map describing the relay result
+     */
+    Map<String, Object> sendPuPayment(Map<String, Object> body) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("amount", JsonUtil.requireDouble(body, "amount"));
+        payload.put("senderName", JsonUtil.requireString(body, "senderName"));
+        payload.put("senderCardNumber", JsonUtil.requireString(body, "senderCardNumber"));
+        payload.put("senderCVV", JsonUtil.requireString(body, "senderCVV"));
+        payload.put("senderExpiryDate", JsonUtil.requireString(body, "senderExpiryDate"));
+        payload.put("senderBillingAddress", JsonUtil.requireString(body, "senderBillingAddress"));
+        payload.put("senderEmail", JsonUtil.requireString(body, "senderEmail"));
+        payload.put("receiverName", JsonUtil.requireString(body, "receiverName"));
+        payload.put("receiverBankName", JsonUtil.optionalString(body, "receiverBankName"));
+        payload.put("receiverAccountNumber", JsonUtil.requireString(body, "receiverAccountNumber"));
+        payload.put("receiverSortCode", JsonUtil.requireString(body, "receiverSortCode"));
+        return integrationClient.sendPuPayment(payload);
+    }
+
+    /**
      * Generates a turnover report for products sold within the requested date range.
      * <p>
      * The report aggregates sold quantity and revenue per product and returns both structured data and a
@@ -1830,7 +1885,7 @@ final class Database {
      *
      * @param applicationId the application identifier to process
      * @param body a map containing the approval decision
-     * @return a map containing a success message and an email logging flag
+     * @return a map containing a success message, local email logging flag, and PU mail relay result
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> decideApplication(long applicationId, Map<String, Object> body) throws SQLException {
@@ -1871,10 +1926,20 @@ final class Database {
                     update.setLong(7, applicationId);
                     update.executeUpdate();
                 }
+                String subject = approved ? "IPOS-PU membership approved" : "IPOS-PU membership rejected";
                 // logs email
-                logEmail(connection, email, approved ? "IPOS-PU membership approved" : "IPOS-PU membership rejected", message);
+                logEmail(connection, email, subject, message);
                 connection.commit();
-                return Map.of("message", "Application processed", "emailLogged", true);
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("message", "Application processed");
+                response.put("emailLogged", true);
+                response.put("puMail", integrationClient.sendPuMail(
+                        "ipos-sa@londonsoftwarehouse.local",
+                        List.of(email),
+                        subject,
+                        message
+                ));
+                return response;
             } catch (SQLException ex) {
                 // if error caught roll back sql and throw exception
                 connection.rollback();
@@ -2551,7 +2616,12 @@ final class Database {
             Map<String, Object> syncItem = new LinkedHashMap<>();
             syncItem.put("productId", item.get("product_id"));
             syncItem.put("name", product.get("name"));
+            syncItem.put("packageType", product.get("package_type"));
+            syncItem.put("units", product.get("unit"));
+            syncItem.put("unitsInAPack", product.get("units_in_pack"));
+            syncItem.put("bulkCost", product.get("unit_price"));
             syncItem.put("quantity", item.get("quantity"));
+            syncItem.put("stockLimit", product.get("minimum_stock_level"));
             items.add(syncItem);
         }
         return items;

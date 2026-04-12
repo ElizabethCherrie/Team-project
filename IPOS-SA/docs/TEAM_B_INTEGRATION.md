@@ -143,6 +143,44 @@ This is useful if Team B wants to show current balance or account warnings insid
 
 `GET /api/merchants/<merchantId>`
 
+## Team A to Team B Stock Synchronization
+
+Team B has now confirmed the stock ingestion endpoint:
+
+`POST http://localhost:8088/stock/ipos`
+
+Team A calls this endpoint when an `IPOS-SA` order is marked `DELIVERED`.
+
+Team B expects one JSON payload per delivered item with this shape:
+
+```json
+{
+  "name": "Aspirin",
+  "packageType": "BOX",
+  "units": "CAPS",
+  "unitsInAPack": 20,
+  "bulkCost": 0.5,
+  "markupRate": 2,
+  "quantity": 10,
+  "stockLimit": 500
+}
+```
+
+Notes:
+
+- `packageType` is normalized by Team A to Team B's enum values: `BOX`, `BOTTLE`
+- `units` is normalized by Team A to Team B's enum values: `CAPS`, `ML`, `OTHER`
+- `bulkCost` is mapped from Team A's product unit price field
+- `markupRate` defaults to `2` unless Team A overrides `IPOS_CA_MARKUP_RATE`
+- the Team A product ID is retained internally for logging, but Team B's agreed request body does not currently include it
+
+Suggested runtime configuration for Team A:
+
+```powershell
+$env:IPOS_CA_STOCK_SYNC_URL = "http://localhost:8088/stock/ipos"
+$env:IPOS_CA_MARKUP_RATE = "2"
+```
+
 ## Recommended Team B Flow
 
 For a merchant using `IPOS-CA`:

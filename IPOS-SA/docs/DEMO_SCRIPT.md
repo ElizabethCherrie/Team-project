@@ -68,6 +68,7 @@ Show:
 Then optionally:
 
 - update from `DISPATCHED` to `DELIVERED`
+- point out the returned `integration` payload showing Team B stock sync status
 
 ### 4. Merchant views invoice
 
@@ -126,6 +127,20 @@ Show:
 - list applications
 - approve or reject one
 - explain that email is logged in the prototype
+- point out the returned `puMail` relay result when Team C's mail endpoint is configured
+
+### 8. Integration diagnostics
+
+Still as manager or admin:
+
+Show:
+
+- `GET /api/integrations` from the browser/API client if needed
+- configured Team B and Team C endpoint URLs
+- explain that:
+  - Team B stock sync is triggered when an order becomes `DELIVERED`
+  - Team C mail relay is triggered when an application is processed
+  - Team C payment relay is available through `POST /api/integrations/pu/pay` for integration testing
 
 ## If the Examiner Asks About Integration
 
@@ -134,6 +149,9 @@ Say:
 - each subsystem keeps its own database
 - integration is done via HTTP, not direct shared database access
 - `IPOS-CA` can hand off to Team A using a session token URL
+- Team A now also has live outbound hooks for:
+  - delivered-order stock updates to `IPOS-CA`
+  - application outcome mail relay to `IPOS-PU`
 
 ## High-Risk Things to Avoid During Demo
 
