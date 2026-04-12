@@ -48,10 +48,10 @@ final class IntegrationClient {
      */
     static IntegrationClient fromEnvironment() {
         return new IntegrationClient(
-                System.getenv().getOrDefault("IPOS_CA_STOCK_SYNC_URL", ""),
-                System.getenv().getOrDefault("IPOS_PU_PAYMENT_URL", ""),
-                System.getenv().getOrDefault("IPOS_PU_MAIL_URL", ""),
-                parseMarkupRate(System.getenv().getOrDefault("IPOS_CA_MARKUP_RATE", "2"))
+                envOrDefault("IPOS_CA_STOCK_SYNC_URL", "http://localhost:8088/stock/ipos"),
+                envOrDefault("IPOS_PU_PAYMENT_URL", "http://localhost:8090/pay"),
+                envOrDefault("IPOS_PU_MAIL_URL", "http://localhost:8090/mail"),
+                parseMarkupRate(envOrDefault("IPOS_CA_MARKUP_RATE", "2"))
         );
     }
 
@@ -101,6 +101,32 @@ final class IntegrationClient {
         summary.put("sourceOrderId", order.get("order_id"));
         summary.put("results", results);
         return summary;
+    }
+
+    /**
+     * Sends a single stock item payload to Team B's IPOS-CA subsystem using the agreed contract.
+     *
+     * @param payload the stock payload shaped to Team B's expected JSON body
+     * @return a result map describing whether the callback was sent successfully
+     */
+    Map<String, Object> sendCaStockItem(Map<String, Object> payload) {
+        if (caStockSyncUrl == null) {
+            return Map.of(
+                    "target", "IPOS-CA",
+                    "status", "SKIPPED",
+                    "reason", "No CA stock sync URL configured"
+            );
+        }
+        Map<String, Object> normalizedPayload = new LinkedHashMap<>();
+        normalizedPayload.put("name", payload.get("name"));
+        normalizedPayload.put("packageType", normalizePackageType(payload.get("packageType")));
+        normalizedPayload.put("units", normalizeUnitType(payload.get("units")));
+        normalizedPayload.put("unitsInAPack", payload.get("unitsInAPack"));
+        normalizedPayload.put("bulkCost", payload.get("bulkCost"));
+        normalizedPayload.put("markupRate", payload.getOrDefault("markupRate", caMarkupRate));
+        normalizedPayload.put("quantity", payload.get("quantity"));
+        normalizedPayload.put("stockLimit", payload.get("stockLimit"));
+        return postJson("IPOS-CA", caStockSyncUrl, normalizedPayload);
     }
 
     /**
@@ -192,6 +218,14 @@ final class IntegrationClient {
             return null;
         }
         return value.trim();
+    }
+
+    private static String envOrDefault(String key, String fallback) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
     }
 
     private static int parseMarkupRate(String value) {

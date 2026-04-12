@@ -21,6 +21,21 @@ http://localhost:8080/login.html
 - `accountant / Count_money`
 - `city / northampton`
 
+The normal launcher now uses the demo integration defaults automatically:
+
+- `http://localhost:8088/stock/ipos`
+- `http://localhost:8090/mail`
+- `http://localhost:8090/pay`
+- CA markup rate `2`
+
+So this is enough in most cases:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1
+```
+
+`run-integrated-demo.ps1` is still available as an explicit demo launcher, but it is no longer required just to load the default integration endpoints.
+
 ## Demo Flow
 
 ### 1. Merchant logs in and browses catalogue
@@ -141,6 +156,11 @@ Show:
   - Team B stock sync is triggered when an order becomes `DELIVERED`
   - Team C mail relay is triggered when an application is processed
   - Team C payment relay is available through `POST /api/integrations/pu/pay` for integration testing
+
+Still as operations staff:
+
+- show `Relay CA Stock Sync` as the explicit CA test control
+- explain that the same contract is also triggered automatically when an order is marked `DELIVERED`
 
 ## If the Examiner Asks About Integration
 

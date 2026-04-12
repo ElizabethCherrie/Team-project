@@ -74,6 +74,7 @@ const actionDescriptions = {
   reportCompanyInvoices: "Generate invoices across all merchants.",
   reportDebtorReminders: "Show current debtor reminders and overdue merchants.",
   integrationStatus: "Show the configured CA and PU integration endpoints for demo diagnostics.",
+  sendCaStock: "Relay a stock item to Team B's IPOS-CA stock endpoint using the agreed contract.",
   sendPuMail: "Relay a mail request to Team C's IPOS-PU mail endpoint.",
   sendPuPayment: "Relay a payment request to Team C's IPOS-PU payment endpoint.",
   createApplication: "Record a new non-commercial application from the portal.",
@@ -126,6 +127,7 @@ const actionIcons = {
   reportCompanyInvoices: "C",
   reportDebtorReminders: "D",
   integrationStatus: "I",
+  sendCaStock: "C",
   sendPuMail: "M",
   sendPuPayment: "£",
   createApplication: "+",
@@ -296,8 +298,17 @@ const roleModules = {
     {
       pill: "Integration",
       desc: "Review the current subsystem integration targets while demonstrating delivery flow.",
-      fields: [],
-      buttons: [["Integration Status", "integrationStatus"]],
+      fields: [
+        ["name", "Product Name", "Aspirin"],
+        ["packageType", "Package Type", "BOX"],
+        ["units", "Units", "CAPS"],
+        ["unitsInAPack", "Units In Pack", "20"],
+        ["bulkCost", "Bulk Cost", "0.50"],
+        ["markupRate", "Markup Rate", "2"],
+        ["quantity", "Quantity", "10"],
+        ["stockLimit", "Stock Limit", "15"],
+      ],
+      buttons: [["Integration Status", "integrationStatus"], ["Relay CA Stock Sync", "sendCaStock"]],
     },
   ],
   ACCOUNTING_STAFF: [
@@ -554,6 +565,21 @@ async function runAction(action, form, label) {
         break;
       case "integrationStatus":
         result = await apiRequest("/integrations");
+        break;
+      case "sendCaStock":
+        result = await apiRequest("/integrations/ca/stock", {
+          method: "POST",
+          body: {
+            name: values.name,
+            packageType: values.packageType,
+            units: values.units,
+            unitsInAPack: Number(values.unitsInAPack),
+            bulkCost: Number(values.bulkCost),
+            markupRate: Number(values.markupRate || 2),
+            quantity: Number(values.quantity),
+            stockLimit: Number(values.stockLimit),
+          },
+        });
         break;
       case "sendPuMail":
         result = await apiRequest("/integrations/pu/mail", {

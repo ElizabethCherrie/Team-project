@@ -487,6 +487,11 @@ final class ApiHandler implements HttpHandler {
                 return;
             }
         }
+        if (parts.size() == 3 && "POST".equals(method) && "ca".equals(parts.get(1)) && "stock".equals(parts.get(2))) {
+            requireRole(exchange, "ADMINISTRATOR", "MANAGER", "OPERATIONS_STAFF");
+            writeJson(exchange, 200, db.sendCaStock(body(exchange)));
+            return;
+        }
         throw new ApiException(404, "Route not found");
     }
 

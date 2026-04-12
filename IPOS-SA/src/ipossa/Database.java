@@ -1585,6 +1585,25 @@ final class Database {
     }
 
     /**
+     * Relays a single stock item to Team B's IPOS-CA subsystem using the agreed JSON contract.
+     *
+     * @param body a map containing the CA stock payload fields
+     * @return a map describing the relay result
+     */
+    Map<String, Object> sendCaStock(Map<String, Object> body) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("name", JsonUtil.requireString(body, "name"));
+        payload.put("packageType", JsonUtil.requireString(body, "packageType"));
+        payload.put("units", JsonUtil.requireString(body, "units"));
+        payload.put("unitsInAPack", JsonUtil.requireInt(body, "unitsInAPack"));
+        payload.put("bulkCost", JsonUtil.requireDouble(body, "bulkCost"));
+        payload.put("markupRate", body.containsKey("markupRate") ? JsonUtil.requireInt(body, "markupRate") : 2);
+        payload.put("quantity", JsonUtil.requireInt(body, "quantity"));
+        payload.put("stockLimit", JsonUtil.requireInt(body, "stockLimit"));
+        return integrationClient.sendCaStockItem(payload);
+    }
+
+    /**
      * Generates a turnover report for products sold within the requested date range.
      * <p>
      * The report aggregates sold quantity and revenue per product and returns both structured data and a
