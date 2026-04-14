@@ -187,7 +187,7 @@ final class ApiHandler implements HttpHandler {
             return;
         }
         if (parts.size() == 1 && "POST".equals(method)) {
-            requireRole(exchange, "ADMINISTRATOR");
+            requireRole(exchange, "ADMINISTRATOR", "MANAGER");
             writeJson(exchange, 201, db.createMerchant(body(exchange)));
             return;
         }
