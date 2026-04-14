@@ -208,6 +208,7 @@ const roleModules = {
         ["fixedDiscountRate", "Fixed Discount Rate", "3"],
       ],
       buttons: [
+        ["Create New Merchant Account", "createMerchant"],
         ["Update Merchant Details", "updateMerchant"],
         ["View Merchant Information", "getMerchant"],
         ["Modify Merchant Settings", "updateDiscount"],
