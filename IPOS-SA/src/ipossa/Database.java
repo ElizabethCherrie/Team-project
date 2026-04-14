@@ -309,7 +309,8 @@ final class Database {
             if ("MERCHANT".equals(auth.role()) && auth.merchantId() != null) {
                 response.put("merchant", getMerchantById(connection, auth.merchantId()));
                 response.put("warnings", evaluateMerchantAccount(connection, auth.merchantId()).get("warnings"));
-            } else if ("ADMINISTRATOR".equals(auth.role()) || "MANAGER".equals(auth.role())) {
+            } else if (List.of("ADMINISTRATOR", "MANAGER", "OPERATIONS_STAFF").contains(auth.role())) {
+                // Operations Staff now also see low stock warnings
                 response.put("warnings", lowStockRows(connection));
             } else {
                 response.put("warnings", List.of());
@@ -504,9 +505,23 @@ final class Database {
             if ("MERCHANT".equals(auth.role()) && !Objects.equals(auth.merchantId(), merchantId)) {
                 throw new ApiException(403, "Merchants can only view their own account");
             }
+
             Map<String, Object> merchant = getMerchantById(connection, merchantId);
             merchant.put("warnings", evaluateMerchantAccount(connection, merchantId).get("warnings"));
-            return merchant;
+
+            // Add discount information for merchant display
+            if (merchant.containsKey("discount_type") && merchant.get("discount_type") != null) {
+                String discountType = Objects.toString(merchant.get("discount_type"), "");
+                if ("FIXED".equals(discountType)) {
+                    merchant.put("discount_rate", merchant.get("fixed_discount_rate"));
+                    merchant.put("discount_description", "Fixed discount of " + merchant.get("fixed_discount_rate") + "% on all orders");
+                } else if ("FLEXIBLE".equals(discountType)) {
+                    merchant.put("discount_description", "Flexible discount: 1% (under £1000), 2% (£1000-2000), 3% (over £2000) per month");
+                    merchant.put("pending_credit", merchant.get("pending_discount_credit"));
+                }
+            }
+
+            return merchant;  // FIXED: Return the merchant object, not empty map
         }
     }
 
@@ -1043,6 +1058,62 @@ final class Database {
     }
 
     /**
+     * Generates a formatted low stock report as per Appendix 3.
+     */
+    Map<String, Object> getFormattedLowStockReport() throws SQLException {
+        try (Connection connection = connect()) {
+            List<Map<String, Object>> lowStockItems = new ArrayList<>();
+
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT product_id, name, stock_level, minimum_stock_level, " +
+                            "CAST(ROUND((minimum_stock_level * 1.1) - stock_level) AS INTEGER) AS recommended_min_order " +
+                            "FROM products WHERE stock_level < minimum_stock_level ORDER BY product_id")) {
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("item_id", rs.getString("product_id"));
+                        item.put("description", rs.getString("name"));
+                        item.put("availability", rs.getInt("stock_level"));
+                        item.put("stock_limit", rs.getInt("minimum_stock_level"));
+                        item.put("recommended_min_order", rs.getInt("recommended_min_order"));
+                        lowStockItems.add(item);
+                    }
+                }
+            }
+
+            // Build formatted report as per Appendix 3
+            StringBuilder report = new StringBuilder();
+            report.append("Low Stock Level Report\n");
+            report.append("Generated: ").append(LocalDate.now()).append("\n");
+            report.append("By: System Administrator\n\n");
+            report.append(String.format("%-12s %-30s %-12s %-12s %-18s\n",
+                    "Item ID", "Description", "Availability", "Stock Limit", "Recommended Min Order"));
+            report.append("-------------------------------------------------------------------------------\n");
+
+            for (Map<String, Object> item : lowStockItems) {
+                report.append(String.format("%-12s %-30s %-12d %-12d %-18d\n",
+                        item.get("item_id"),
+                        truncate(String.valueOf(item.get("description")), 30),
+                        item.get("availability"),
+                        item.get("stock_limit"),
+                        item.get("recommended_min_order")));
+            }
+
+            return Map.of(
+                    "title", "Low Stock Report",
+                    "generatedAt", now(),
+                    "data", lowStockItems,
+                    "printableText", report.toString()
+            );
+        }
+    }
+
+    private String truncate(String str, int length) {
+        if (str.length() <= length) return str;
+        return str.substring(0, length - 3) + "...";
+    }
+
+    /**
      * Creates a new order for the authenticated merchant and generates an invoice for it.
      * <p>
      * The merchant may only place orders for their own account. Each requested item must have a positive
@@ -1065,24 +1136,38 @@ final class Database {
         }
         try (Connection connection = connect()) {
             AuthContext auth = resolveAuth(connection, headers);
-            // throws error if merchant trys to place order for any account other than their own
+            // throws error if merchant tries to place order for any account other than their own
             if (!Objects.equals(auth.merchantId(), merchantId)) {
                 throw new ApiException(403, "Merchants can only place orders for their own account");
             }
             connection.setAutoCommit(false);
             try {
-                String accountStatus = Objects.toString(evaluateMerchantAccount(connection, merchantId).get("accountStatus"), "NORMAL");
-                // throws error if account is blocked or suspended (or any status other than normal)
-                if (!"NORMAL".equals(accountStatus)) {
-                    throw new ApiException(400, "Merchant account is not allowed to place orders: " + accountStatus);
-                }
-                // gets merchant
+                // gets merchant FIRST so we can check account status properly
                 Map<String, Object> merchant = getMerchantById(connection, merchantId);
+
+                // P0 FIX: Better account status checking with specific error messages
+                String accountStatus = Objects.toString(merchant.get("account_status"), "NORMAL");
+
+                // Check if account is suspended - no new orders allowed
+                if ("SUSPENDED".equals(accountStatus)) {
+                    throw new ApiException(403, "Account is SUSPENDED due to overdue payments (15-30 days). Please contact InfoPharma to restore your account.");
+                }
+
+                // Check if account is in default - needs director approval
+                if ("IN_DEFAULT".equals(accountStatus)) {
+                    throw new ApiException(403, "Account is IN DEFAULT (30+ days overdue). Please contact the Director of Operations to restore your account.");
+                }
+
+                // Normal account check
+                if (!"NORMAL".equals(accountStatus)) {
+                    throw new ApiException(400, "Merchant account is not allowed to place orders. Status: " + accountStatus);
+                }
+
                 double subtotal = 0;
                 List<Map<String, Object>> items = new ArrayList<>();
-                // itterates through all items in order
-                for (Object itemObject : requestedItems) {
 
+                // Iterates through all items in order
+                for (Object itemObject : requestedItems) {
                     // throws error if item quantity less than 0
                     Map<String, Object> requested = JsonUtil.asObject(itemObject);
                     String productId = JsonUtil.requireString(requested, "productId");
@@ -1093,8 +1178,9 @@ final class Database {
 
                     // throws error if insufficient stock
                     Map<String, Object> product = getProductById(connection, productId);
-                    if (((Number) product.get("stock_level")).intValue() < quantity) {
-                        throw new ApiException(400, "Insufficient stock for product " + productId);
+                    int currentStock = ((Number) product.get("stock_level")).intValue();
+                    if (currentStock < quantity) {
+                        throw new ApiException(400, "Insufficient stock for product " + productId + ". Available: " + currentStock);
                     }
 
                     // adds price to subtotal
@@ -1104,21 +1190,38 @@ final class Database {
                     items.add(Map.of("productId", productId, "quantity", quantity, "unitPrice", unitPrice, "lineTotal", lineTotal));
                 }
 
-                // calculates discount, total price, and throws error if price exceeding credit limit
-                double discountAmount = calculateDiscount(merchant, subtotal);
+                // P0 FIX: Calculate discount based on plan (including pending credit)
+                double pendingCredit = ((Number) merchant.get("pending_discount_credit")).doubleValue();
+                String discountType = Objects.toString(merchant.get("discount_type"), null);
+                double discountAmount = 0;
+
+                if ("FIXED".equalsIgnoreCase(discountType)) {
+                    double fixedRate = ((Number) merchant.get("fixed_discount_rate")).doubleValue();
+                    discountAmount = pendingCredit + (subtotal * (fixedRate / 100.0));
+                } else if ("FLEXIBLE".equalsIgnoreCase(discountType)) {
+                    // For flexible, only apply pending credit at order time
+                    // Monthly discount is calculated separately at month end
+                    discountAmount = pendingCredit;
+                } else {
+                    discountAmount = pendingCredit;
+                }
+
                 double totalAmount = Math.max(0, subtotal - discountAmount);
+
                 double creditLimit = ((Number) merchant.get("credit_limit")).doubleValue();
                 double balance = ((Number) merchant.get("balance")).doubleValue();
                 if (balance + totalAmount > creditLimit) {
-                    throw new ApiException(400, "Credit limit exceeded");
+                    throw new ApiException(400, String.format(
+                            "Credit limit would be exceeded. Current balance: £%.2f, Order total: £%.2f, Credit limit: £%.2f",
+                            balance, totalAmount, creditLimit));
                 }
 
                 // sql statement to create order in db
                 long orderId;
                 try (PreparedStatement insert = connection.prepareStatement("""
-                        INSERT INTO orders (merchant_id, order_date, status, subtotal, discount_amount, total_amount)
-                        VALUES (?, ?, 'ACCEPTED', ?, ?, ?)
-                        """, Statement.RETURN_GENERATED_KEYS)) {
+                    INSERT INTO orders (merchant_id, order_date, status, subtotal, discount_amount, total_amount)
+                    VALUES (?, ?, 'ACCEPTED', ?, ?, ?)
+                    """, Statement.RETURN_GENERATED_KEYS)) {
                     insert.setString(1, merchantId);
                     insert.setString(2, now());
                     insert.setDouble(3, subtotal);
@@ -1134,9 +1237,9 @@ final class Database {
                 // adds items to order using table orderItems
                 for (Map<String, Object> item : items) {
                     try (PreparedStatement itemInsert = connection.prepareStatement("""
-                            INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total)
-                            VALUES (?, ?, ?, ?, ?)
-                            """)) {
+                        INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total)
+                        VALUES (?, ?, ?, ?, ?)
+                        """)) {
                         itemInsert.setLong(1, orderId);
                         itemInsert.setString(2, Objects.toString(item.get("productId")));
                         itemInsert.setInt(3, ((Number) item.get("quantity")).intValue());
@@ -1147,19 +1250,21 @@ final class Database {
 
                     // updates stock level in DB
                     try (PreparedStatement updateProduct = connection.prepareStatement("""
-                            UPDATE products SET stock_level = stock_level - ?, updated_at = ? WHERE product_id = ?
-                            """)) {
+                        UPDATE products SET stock_level = stock_level - ?, updated_at = ? WHERE product_id = ?
+                        """)) {
                         updateProduct.setInt(1, ((Number) item.get("quantity")).intValue());
                         updateProduct.setString(2, now());
                         updateProduct.setString(3, Objects.toString(item.get("productId")));
                         updateProduct.executeUpdate();
                     }
-                    insertStockMovement(connection, Objects.toString(item.get("productId")), "SALE", ((Number) item.get("quantity")).intValue(), "ORDER", Long.toString(orderId));
+                    insertStockMovement(connection, Objects.toString(item.get("productId")), "SALE",
+                            ((Number) item.get("quantity")).intValue(), "ORDER", Long.toString(orderId));
                 }
 
+                // P0 FIX: Reset pending discount credit after use
                 try (PreparedStatement updateMerchant = connection.prepareStatement("""
-                        UPDATE merchants SET balance = ?, pending_discount_credit = 0, updated_at = ? WHERE merchant_id = ?
-                        """)) {
+                    UPDATE merchants SET balance = ?, pending_discount_credit = 0, updated_at = ? WHERE merchant_id = ?
+                    """)) {
                     updateMerchant.setDouble(1, balance + totalAmount);
                     updateMerchant.setString(2, now());
                     updateMerchant.setString(3, merchantId);
@@ -1168,7 +1273,26 @@ final class Database {
 
                 Map<String, Object> invoice = generateInvoice(connection, orderId);
                 connection.commit();
-                return Map.of("message", "Order created", "orderId", orderId, "invoice", invoice, "totalAmount", totalAmount);
+
+                // P0 FIX: Return discount info in response for frontend display
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("message", "Order created");
+                response.put("orderId", orderId);
+                response.put("invoice", invoice);
+                response.put("totalAmount", totalAmount);
+                response.put("subtotal", subtotal);
+                response.put("discountAmount", discountAmount);
+                response.put("discountApplied", discountAmount > 0);
+                if ("FIXED".equalsIgnoreCase(discountType) && discountAmount > 0) {
+                    response.put("discountRate", merchant.get("fixed_discount_rate"));
+                    response.put("discountType", "FIXED");
+                } else if (pendingCredit > 0) {
+                    response.put("discountType", "PENDING_CREDIT");
+                    response.put("pendingCreditUsed", pendingCredit);
+                }
+
+                return response;
+
             } catch (SQLException ex) {
                 // if sql Exception arises, rollback all sql and then throw ex
                 connection.rollback();
@@ -1282,38 +1406,48 @@ final class Database {
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> updateOrderStatus(long orderId, Map<String, Object> body) throws SQLException {
-        // checks status is valid
         String newStatus = JsonUtil.requireUpper(body, "status");
         if (!List.of("ACCEPTED", "PROCESSING", "DISPATCHED", "DELIVERED").contains(newStatus)) {
             throw new ApiException(400, "Invalid order status");
         }
-        // updates if dispatched is new status
+
+        // Validate dispatch details when moving to DISPATCHED
         if ("DISPATCHED".equals(newStatus)) {
+            // All these fields are required for dispatch
             JsonUtil.requireString(body, "courier");
             JsonUtil.requireString(body, "trackingNumber");
             JsonUtil.requireString(body, "expectedDelivery");
+            JsonUtil.requireString(body, "dispatchedBy");
+
+            // Validate expected delivery is a future date
+            String expectedDelivery = JsonUtil.requireString(body, "expectedDelivery");
+            try {
+                LocalDate expectedDate = LocalDate.parse(expectedDelivery);
+                if (expectedDate.isBefore(LocalDate.now())) {
+                    throw new ApiException(400, "Expected delivery date must be today or in the future");
+                }
+            } catch (Exception e) {
+                throw new ApiException(400, "Invalid expected delivery date format. Use YYYY-MM-DD");
+            }
         }
 
         try (Connection connection = connect()) {
             Map<String, Object> order = getOrderById(connection, orderId);
             String currentStatus = Objects.toString(order.get("status"), "ACCEPTED");
 
-            // check if valid order transition, if not throw error
             if (!isValidOrderTransition(currentStatus, newStatus)) {
                 throw new ApiException(400, "Invalid order transition from " + currentStatus + " to " + newStatus);
             }
-            // create sql statement and add releveant data
-            try (PreparedStatement ps = connection.prepareStatement("""
-                    UPDATE orders
-                    SET status = ?, dispatched_by = COALESCE(?, dispatched_by),
-                        dispatch_date = COALESCE(?, dispatch_date), courier = COALESCE(?, courier),
-                        tracking_number = COALESCE(?, tracking_number), expected_delivery = COALESCE(?, expected_delivery),
-                        delivered_date = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_date END
-                    WHERE order_id = ?
-                    """)) {
+
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "UPDATE orders SET status = ?, dispatched_by = COALESCE(?, dispatched_by), " +
+                            "dispatch_date = COALESCE(?, dispatch_date), courier = COALESCE(?, courier), " +
+                            "tracking_number = COALESCE(?, tracking_number), expected_delivery = COALESCE(?, expected_delivery), " +
+                            "delivered_date = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_date END " +
+                            "WHERE order_id = ?")) {
                 ps.setString(1, newStatus);
                 setNullable(ps, 2, JsonUtil.optionalString(body, "dispatchedBy"));
-                setNullable(ps, 3, JsonUtil.optionalString(body, "dispatchDate", "DISPATCHED".equals(newStatus) ? now() : null));
+                setNullable(ps, 3, "DISPATCHED".equals(newStatus) ? now() : JsonUtil.optionalString(body, "dispatchDate"));
                 setNullable(ps, 4, JsonUtil.optionalString(body, "courier"));
                 setNullable(ps, 5, JsonUtil.optionalString(body, "trackingNumber"));
                 setNullable(ps, 6, JsonUtil.optionalString(body, "expectedDelivery"));
@@ -1321,18 +1455,20 @@ final class Database {
                 ps.setString(8, "DELIVERED".equals(newStatus) ? now() : null);
                 ps.setLong(9, orderId);
 
-                // throws exception if order cannot be found
                 if (ps.executeUpdate() == 0) {
                     throw new ApiException(404, "Order not found");
                 }
             }
+
             Map<String, Object> updatedOrder = getOrderById(connection, orderId);
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("message", "Order status updated");
             response.put("status", newStatus);
+
             if ("DELIVERED".equals(newStatus)) {
                 response.put("integration", integrationClient.notifyCaDelivery(updatedOrder, deliverySyncItems(connection, orderId)));
             }
+
             return response;
         }
     }
@@ -2186,17 +2322,28 @@ final class Database {
                 }
             }
         }
+
         Map<String, Object> order = getOrderById(connection, orderId);
+        String orderDateStr = Objects.toString(order.get("order_date"), now());
+        LocalDate orderDate;
+        try {
+            orderDate = LocalDate.parse(orderDateStr.substring(0, 10));
+        } catch (Exception e) {
+            orderDate = LocalDate.now();
+        }
+
+        // Due date is end of the calendar month of the order date
+        LocalDate dueDate = orderDate.withDayOfMonth(orderDate.lengthOfMonth());
+
         long invoiceId;
-        try (PreparedStatement insert = connection.prepareStatement("""
-                INSERT INTO invoices (order_id, merchant_id, issue_date, due_date, total_amount, paid_amount, status)
-                VALUES (?, ?, ?, ?, ?, 0, 'ISSUED')
-                """, Statement.RETURN_GENERATED_KEYS)) {
-            LocalDate issueDate = LocalDate.now();
+        try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO invoices (order_id, merchant_id, issue_date, due_date, total_amount, paid_amount, status) " +
+                        "VALUES (?, ?, ?, ?, ?, 0, 'ISSUED')",
+                Statement.RETURN_GENERATED_KEYS)) {
             insert.setLong(1, orderId);
             insert.setString(2, Objects.toString(order.get("merchant_id")));
-            insert.setString(3, issueDate.toString());
-            insert.setString(4, issueDate.withDayOfMonth(issueDate.lengthOfMonth()).toString());
+            insert.setString(3, orderDate.toString());
+            insert.setString(4, dueDate.toString());
             insert.setDouble(5, ((Number) order.get("total_amount")).doubleValue());
             insert.executeUpdate();
             try (ResultSet keys = insert.getGeneratedKeys()) {
@@ -2204,6 +2351,7 @@ final class Database {
                 invoiceId = keys.getLong(1);
             }
         }
+
         try (PreparedStatement select = connection.prepareStatement("SELECT * FROM invoices WHERE invoice_id = ?")) {
             select.setLong(1, invoiceId);
             try (ResultSet rs = select.executeQuery()) {
@@ -2303,13 +2451,115 @@ final class Database {
      * @param subtotal the order subtotal to use when calculating the discount
      * @return the calculated discount amount
      */
+    /**
+     * Calculates the discount amount for a merchant based on the configured discount plan.
+     *
+     * @param merchant the merchant data containing discount configuration
+     * @param subtotal the order subtotal to use when calculating the discount
+     * @return the calculated discount amount
+     */
     private double calculateDiscount(Map<String, Object> merchant, double subtotal) {
         double pendingCredit = ((Number) merchant.get("pending_discount_credit")).doubleValue();
         String discountType = Objects.toString(merchant.get("discount_type"), null);
+
         if ("FIXED".equalsIgnoreCase(discountType)) {
-            return pendingCredit + subtotal * (((Number) merchant.get("fixed_discount_rate")).doubleValue() / 100.0);
+            double fixedRate = ((Number) merchant.get("fixed_discount_rate")).doubleValue();
+            // Fixed discount: apply percentage discount PLUS any pending credit
+            return pendingCredit + (subtotal * (fixedRate / 100.0));
+        } else if ("FLEXIBLE".equalsIgnoreCase(discountType)) {
+            // Flexible: only pending credit at order time (monthly discount calculated separately)
+            return pendingCredit;
         }
+
+        // No discount plan - just return pending credit if any
         return pendingCredit;
+    }
+
+    /**
+     * Calculates the flexible discount for a merchant based on their monthly order total.
+     * Called at the end of each calendar month to process pending discounts.
+     *
+     * @param connection the active database connection
+     * @param merchantId the merchant to process
+     * @return the discount amount calculated
+     * @throws SQLException if database error occurs
+     */
+    private double calculateFlexibleDiscount(Connection connection, String merchantId) throws SQLException {
+        // Get merchant's flexible rates
+        Map<String, Object> merchant = getMerchantById(connection, merchantId);
+        double tier1 = ((Number) merchant.get("flexible_rate_tier1")).doubleValue();
+        double tier2 = ((Number) merchant.get("flexible_rate_tier2")).doubleValue();
+        double tier3 = ((Number) merchant.get("flexible_rate_tier3")).doubleValue();
+
+        // Calculate total monthly orders (last 30 days from today)
+        double monthlyTotal = 0;
+        try (PreparedStatement ps = connection.prepareStatement(
+                "SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE merchant_id = ? AND order_date >= date('now', '-30 days')")) {
+            ps.setString(1, merchantId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    monthlyTotal = rs.getDouble(1);
+                }
+            }
+        }
+
+        // Apply tiered discount
+        double discountRate;
+        if (monthlyTotal < 1000) {
+            discountRate = tier1;
+        } else if (monthlyTotal < 2000) {
+            discountRate = tier2;
+        } else {
+            discountRate = tier3;
+        }
+
+        return monthlyTotal * (discountRate / 100.0);
+    }
+
+    /**
+     * Processes flexible discounts for all merchants at month end.
+     * Called by a scheduled job or manually by admin.
+     */
+    Map<String, Object> processMonthlyFlexibleDiscounts() throws SQLException {
+        try (Connection connection = connect()) {
+            connection.setAutoCommit(false);
+            List<Map<String, Object>> results = new ArrayList<>();
+
+            try (Statement stmt = connection.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT merchant_id FROM merchants WHERE discount_type = 'FLEXIBLE'")) {
+
+                while (rs.next()) {
+                    String merchantId = rs.getString(1);
+                    double discountAmount = calculateFlexibleDiscount(connection, merchantId);
+
+                    if (discountAmount > 0) {
+                        // Add to pending discount credit
+                        try (PreparedStatement update = connection.prepareStatement(
+                                "UPDATE merchants SET pending_discount_credit = pending_discount_credit + ?, updated_at = ? WHERE merchant_id = ?")) {
+                            update.setDouble(1, discountAmount);
+                            update.setString(2, now());
+                            update.setString(3, merchantId);
+                            update.executeUpdate();
+                        }
+
+                        Map<String, Object> result = new LinkedHashMap<>();
+                        result.put("merchantId", merchantId);
+                        result.put("discountAmount", discountAmount);
+                        result.put("status", "PROCESSED");
+                        results.add(result);
+
+                        // Log the discount for audit
+                        logEmail(connection, getMerchantById(connection, merchantId).get("email").toString(),
+                                "Monthly Discount Applied",
+                                "Your flexible discount of £" + String.format("%.2f", discountAmount) +
+                                        " has been applied as credit to your next order.");
+                    }
+                }
+            }
+
+            connection.commit();
+            return Map.of("message", "Monthly discounts processed", "results", results);
+        }
     }
 
     /**

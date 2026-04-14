@@ -234,6 +234,11 @@ final class ApiHandler implements HttpHandler {
                 writeJson(exchange, 200, db.deleteDiscountPlan(merchantId));
                 return;
             }
+            if (parts.size() == 3 && "process-discounts".equals(parts.get(2)) && "POST".equals(method)) {
+                requireRole(exchange, "ADMINISTRATOR", "MANAGER");
+                writeJson(exchange, 200, db.processMonthlyFlexibleDiscounts());
+                return;
+            }
         }
         throw new ApiException(404, "Route not found");
     }

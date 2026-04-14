@@ -736,20 +736,253 @@ async function showOrderBuilder(merchantId) {
 
           modal.remove();
 
+          function formatHumanReadable(data, action) {
+            if (!data) return "<p>No data available</p>";
+
+            // Format product list (for View All Products, Search Products)
+            if (data.products && Array.isArray(data.products)) {
+              let html = '<div class="data-table-wrapper"><table class="data-table">';
+              html += `<thead><tr>
+      <th>Product ID</th>
+      <th>Product Name</th>
+      <th>Package</th>
+      <th>Unit</th>
+      <th>Units/Pack</th>
+      <th>Price</th>
+      <th>Stock</th>
+      <th>Min Stock</th>
+    </tr></thead><tbody>`;
+
+              for (const p of data.products) {
+                const lowStock = p.stock_level < p.minimum_stock_level;
+                html += `<tr class="${lowStock ? 'low-stock-row' : ''}">
+        <td>${escapeHtml(p.product_id)}</td>
+        <td><strong>${escapeHtml(p.name)}</strong></td>
+        <td>${escapeHtml(p.package_type || '-')}</td>
+        <td>${escapeHtml(p.unit || '-')}</td>
+        <td>${p.units_in_pack || '-'}</td>
+        <td>£${parseFloat(p.unit_price).toFixed(2)}</td>
+        <td class="${lowStock ? 'stock-warning' : ''}">${p.stock_level}</td>
+        <td>${p.minimum_stock_level}</td>
+      </tr>`;
+              }
+
+              html += '</tbody></table></div>';
+              return html;
+            }
+
+            // Format orders list (for View My Orders, Track Order)
+            if (data.orders && Array.isArray(data.orders)) {
+              let html = '<div class="data-table-wrapper"><table class="data-table">';
+              html += `<thead><tr>
+      <th>Order ID</th>
+      <th>Date</th>
+      <th>Status</th>
+      <th>Total</th>
+      <th>Dispatch Info</th>
+    </tr></thead><tbody>`;
+
+              for (const o of data.orders) {
+                const statusClass = `status-${(o.status || '').toLowerCase()}`;
+                let dispatchInfo = '-';
+                if (o.courier) {
+                  dispatchInfo = `${escapeHtml(o.courier)}<br><small>Tracking: ${escapeHtml(o.tracking_number || '-')}<br>Expected: ${o.expected_delivery || '-'}</small>`;
+                }
+
+                html += `<tr>
+        <td>${o.order_id}</td>
+        <td>${(o.order_date || '').substring(0, 10)}</td>
+        <td><span class="status-badge ${statusClass}">${o.status || 'PENDING'}</span></td>
+        <td>£${parseFloat(o.total_amount).toFixed(2)}</td>
+        <td>${dispatchInfo}</td>
+      </tr>`;
+              }
+
+              html += '</tbody></table></div>';
+              return html;
+            }
+
+            // Format invoices list (for View My Invoices)
+            if (data.invoices && Array.isArray(data.invoices)) {
+              let html = '<div class="data-table-wrapper"><table class="data-table">';
+              html += `<thead><tr>
+      <th>Invoice ID</th>
+      <th>Order ID</th>
+      <th>Issue Date</th>
+      <th>Due Date</th>
+      <th>Total</th>
+      <th>Paid</th>
+      <th>Status</th>
+    </tr></thead><tbody>`;
+
+              for (const inv of data.invoices) {
+                html += `<tr>
+        <td>${inv.invoice_id}</td>
+        <td>${inv.order_id}</td>
+        <td>${inv.issue_date || '-'}</td>
+        <td>${inv.due_date || '-'}</td>
+        <td>£${parseFloat(inv.total_amount).toFixed(2)}</td>
+        <td>£${parseFloat(inv.paid_amount || 0).toFixed(2)}</td>
+        <td><span class="status-badge status-${(inv.status || '').toLowerCase()}">${inv.status || 'ISSUED'}</span></td>
+      </tr>`;
+              }
+
+              html += '</tbody></table></div>';
+              return html;
+            }
+
+            // Format single product
+            if (data.product_id) {
+              return formatHumanReadable({ products: [data] }, action);
+            }
+
+            // Format single order
+            if (data.order_id) {
+              return formatHumanReadable({ orders: [data] }, action);
+            }
+
+            // Format single invoice
+            if (data.invoice_id) {
+              return formatHumanReadable({ invoices: [data] }, action);
+            }
+
+            // Format merchant balance (with discount info)
+            if (data.balance !== undefined) {
+              let discountHtml = '';
+              if (data.discount_type === 'FIXED') {
+                discountHtml = `<div class="discount-info">🏷️ Your discount: ${data.fixed_discount_rate}% off every order</div>`;
+              } else if (data.discount_type === 'FLEXIBLE') {
+                discountHtml = `<div class="discount-info">📊 Flexible discount: 1% (under £1000), 2% (£1000-2000), 3% (over £2000) per month</div>`;
+                if (data.pending_credit && parseFloat(data.pending_credit) > 0) {
+                  discountHtml += `<div class="pending-credit">💰 Pending credit: £${parseFloat(data.pending_credit).toFixed(2)}</div>`;
+                }
+              }
+
+              // Also check if discount info came from getMerchant response
+              if (data.discount_description) {
+                discountHtml = `<div class="discount-info">${escapeHtml(data.discount_description)}</div>`;
+                if (data.pending_credit && parseFloat(data.pending_credit) > 0) {
+                  discountHtml += `<div class="pending-credit">💰 Pending credit: £${parseFloat(data.pending_credit).toFixed(2)}</div>`;
+                }
+              }
+
+              let warningsHtml = '';
+              if (data.warnings && data.warnings.length) {
+                warningsHtml = `<div class="warnings"><strong>⚠️ Warnings:</strong><ul>${data.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`;
+              }
+
+              return `
+      <div class="balance-card">
+        <h3>🏪 Merchant Account</h3>
+        <div class="balance-amount">Balance Due: £${parseFloat(data.balance).toFixed(2)}</div>
+        <div class="balance-status">Status: ${data.account_status || data.accountStatus || 'NORMAL'}</div>
+        <div class="credit-limit">💳 Credit Limit: £${parseFloat(data.credit_limit || 0).toFixed(2)}</div>
+        ${discountHtml}
+        ${warningsHtml}
+      </div>
+    `;
+            }
+
+            // Format low stock report
+            if (data.title === "Low Stock Report" && data.printableText) {
+              return `<pre class="report-print">${escapeHtml(data.printableText)}</pre>`;
+            }
+
+            // Format order confirmation
+            if (data.orderId && data.items) {
+              let itemsHtml = '<div class="order-items"><table class="data-table"><thead><tr><th>Product</th><th>Product ID</th><th>Quantity</th><th>Price</th><th>Line Total</th></tr></thead><tbody>';
+              for (const item of data.items) {
+                itemsHtml += `<tr>
+        <td><strong>${escapeHtml(item.product)}</strong></td>
+        <td>${escapeHtml(item.productId || '-')}</td>
+        <td>${item.quantity}</td>
+        <td>${item.price}</td>
+        <td>${item.lineTotal}</td>
+      </tr>`;
+              }
+              itemsHtml += '</tbody></table></div>';
+
+              let discountHtml = '';
+              if (data.discountApplied && data.discountApplied !== 'None') {
+                discountHtml = `<div class="discount-row">Discount Applied: ${data.discountApplied}</div>`;
+              }
+
+              return `
+      <div class="order-confirmation">
+        <div class="confirmation-header">
+          <h3>✅ Order Confirmed!</h3>
+          <div class="order-number">Order #${data.orderId}</div>
+        </div>
+        ${itemsHtml}
+        <div class="order-totals">
+          ${discountHtml}
+          <div class="total-row grand-total">Total: ${data.totalAmount}</div>
+        </div>
+        <div class="order-status">Status: ${data.status || 'ACCEPTED'}</div>
+      </div>
+    `;
+            }
+
+            // Format printable invoice
+            if (data.printableText) {
+              return `<pre class="invoice-print">${escapeHtml(data.printableText)}</pre>`;
+            }
+
+            // Default: show as formatted JSON for debugging
+            return `<pre class="json-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+          }
+
           // Show order confirmation with product names
-          appendOutput(" Order Confirmation", {
-            orderId: result.orderId,
-            status: "ACCEPTED",
-            totalAmount: `£${parseFloat(result.totalAmount).toFixed(2)}`,
-            discountApplied: discountRate > 0 ? `${discountRate}%` : "None",
-            items: cartItems.map(i => ({
-              product: i.name,
-              productId: i.productId,
-              quantity: i.quantity,
-              price: `£${i.unitPrice.toFixed(2)}`,
-              lineTotal: `£${(i.quantity * i.unitPrice).toFixed(2)}`
-            }))
-          });
+          function appendOutput(title, payload) {
+            const block = document.createElement("div");
+            block.className = "output-block";
+
+            // Use the human readable formatter
+            const humanReadable = formatHumanReadable(payload, title);
+
+            block.innerHTML = `
+    <div class="output-meta">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${new Date().toLocaleString()}</span>
+    </div>
+    ${humanReadable}
+  `;
+
+            workspaceBody.appendChild(block);
+            workspaceTitle.textContent = title;
+            block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+          function formatOrderConfirmation(order) {
+            if (!order.orderId) return formatHumanReadable(order);
+
+            let itemsHtml = '<div class="order-items"><table class="data-table"><thead><tr><th>Product</th><th>Quantity</th><th>Price</th><th>Line Total</th></tr></thead><tbody>';
+            if (order.items) {
+              for (const item of order.items) {
+                itemsHtml += `<tr>
+        <td><strong>${escapeHtml(item.product)}</strong></td>
+        <td>${item.quantity}</td>
+        <td>${item.price}</td>
+        <td>${item.lineTotal}</td>
+      </tr>`;
+              }
+            }
+            itemsHtml += '</tbody></table></div>';
+
+            return `
+    <div class="order-confirmation">
+      <div class="confirmation-header">
+        <h3>✅ Order Confirmed!</h3>
+        <div class="order-number">Order #${order.orderId}</div>
+      </div>
+      ${itemsHtml}
+      <div class="order-totals">
+        <div class="total-row">Discount: ${order.discountApplied || 'None'}</div>
+        <div class="total-row grand-total">Total: ${order.totalAmount}</div>
+      </div>
+      <div class="order-status">Status: ACCEPTED</div>
+    </div>
+  `;
+          }
 
           setBanner(`Order #${result.orderId} placed successfully! Total: £${parseFloat(result.totalAmount).toFixed(2)}`, "warning");
           resolve(result);
