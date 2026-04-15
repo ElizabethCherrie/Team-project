@@ -5,6 +5,13 @@ const apiBaseInput = document.querySelector("#api-base");
 apiBaseInput.value = defaultApiBase();
 bootstrapHandoff();
 
+document.querySelectorAll(".seed-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelector("#username").value = button.dataset.user;
+    document.querySelector("#password").value = button.dataset.pass;
+  });
+});
+
 function defaultApiBase() {
   if (window.location.protocol.startsWith("http")) {
     return `${window.location.origin}/api`;
