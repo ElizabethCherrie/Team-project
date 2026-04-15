@@ -193,7 +193,24 @@ export const roleModules = {
         ["Print Subsystem Report", "reportCompanyInvoices"],
       ],
     },
+    {
+      pill: "Admin",
+      desc: "Delete system users",
+      fields: [
+        ["username", "Username", ""]
+      ],
+      buttons: [["Delete User Account", "deleteUser"]],
+    },
+    {
+      pill: "Admin",
+      desc: "Delete a product from catalogue (fails if product has orders)",
+      fields: [
+        ["productId", "Product ID", ""]
+      ],
+      buttons: [["Delete Catalogue Product", "deleteProduct"]],
+    },
   ],
+
   MANAGER: [
     {
       pill: "Manager",
@@ -276,6 +293,23 @@ export const roleModules = {
         ["Relay PU Mail", "sendPuMail"],
         ["Relay PU Payment", "sendPuPayment"],
       ],
+    },
+    {
+      pill: "Manager",
+      desc: "Delete a merchant's discount plan",
+      fields: [
+        ["merchantId", "Merchant ID", ""]
+      ],
+      buttons: [["Delete Discount Plan", "deleteDiscountPlan"]],
+    },
+    {
+      pill: "Manager",
+      desc: "Restore merchant account from IN_DEFAULT to NORMAL/SUSPENDED (requires director approval)",
+      fields: [
+        ["merchantId", "Merchant ID", ""],
+        ["newStatus", "New Status", "NORMAL"]
+      ],
+      buttons: [["Restore Merchant from Default", "restoreMerchant"]],
     },
   ],
   OPERATIONS_STAFF: [

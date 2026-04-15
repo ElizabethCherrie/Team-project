@@ -36,25 +36,7 @@ export async function runAction(action, form, label) {
         result = await apiRequest(`/merchants/${values.merchantId || state.session.merchantId}`);
         break;
       case "createMerchant":
-        try {
-          result = await apiRequest("/merchants", {
-            method: "POST",
-            body: {
-              merchantId: values.merchantId,
-              email: values.email,
-              password: values.password,
-              name: values.name,
-              address: values.address,
-              phone: values.phone || "",
-              creditLimit: Number(values.creditLimit),
-              discountType: values.discountType,
-              fixedDiscountRate: Number(values.fixedDiscountRate || 0)
-            }
-          });
-        } catch (error) {
-          // This will now show the friendly message from the backend
-          throw new Error(error.message);
-        }
+        result = await apiRequest("/merchants", { method: "POST", body: { merchantId: values.merchantId, email: values.email, password: values.password, name: values.name, address: values.address, phone: values.phone || "", creditLimit: Number(values.creditLimit), discountType: values.discountType, fixedDiscountRate: Number(values.fixedDiscountRate || 0) } });
         break;
       case "updateMerchant":
         result = await apiRequest(`/merchants/${values.merchantId}`, { method: "PUT", body: { name: values.name, email: values.email, address: values.address, creditLimit: Number(values.creditLimit) } });
@@ -74,9 +56,6 @@ export async function runAction(action, form, label) {
       case "updateProduct":
         result = await apiRequest(`/products/${values.productId}`, { method: "PUT", body: { name: values.name, packageType: values.packageType, unit: values.unit, unitsInPack: Number(values.unitsInPack), unitPrice: Number(values.unitPrice), stockLevel: Number(values.stockLevel), minimumStockLevel: Number(values.minimumStockLevel) } });
         break;
-      case "deleteProduct":
-        result = await apiRequest(`/products/${values.productId}`, { method: "DELETE" });
-        break;
       case "restockProduct":
         result = await apiRequest(`/products/${values.productId}/stock`, { method: "POST", body: { quantity: Number(values.quantity) } });
         break;
@@ -85,9 +64,6 @@ export async function runAction(action, form, label) {
         break;
       case "createUser":
         result = await apiRequest("/users", { method: "POST", body: { username: values.username, password: values.password, role: values.role } });
-        break;
-      case "deleteUser":
-        result = await apiRequest(`/users/${values.username}`, { method: "DELETE" });
         break;
       case "merchantBalance":
         result = await apiRequest(`/merchants/${values.merchantId || state.session.merchantId}/balance`);
@@ -101,9 +77,6 @@ export async function runAction(action, form, label) {
         break;
       case "updateDiscount":
         result = await apiRequest(`/merchants/${values.merchantId}/discount-plan`, { method: "PUT", body: { discountType: values.discountType, fixedDiscountRate: Number(values.fixedDiscountRate || 0) } });
-        break;
-      case "restoreMerchant":
-        result = await apiRequest(`/merchants/${values.merchantId}/restore`, { method: "POST", body: { directorApproved: true, newStatus: values.newStatus } });
         break;
       case "reportLowStock":
         result = await apiRequest("/reports/low-stock");
@@ -258,6 +231,27 @@ export async function runAction(action, form, label) {
         break;
       case "listMyInvoices":
         result = await apiRequest(`/invoices?merchantId=${state.session.merchantId}`);
+        break;
+      case "deleteUser":
+        result = await apiRequest(`/users/${values.username}`, { method: "DELETE" });
+        break;
+
+      case "deleteProduct":
+        result = await apiRequest(`/products/${values.productId}`, { method: "DELETE" });
+        break;
+
+      case "deleteDiscountPlan":
+        result = await apiRequest(`/merchants/${values.merchantId}/discount-plan`, { method: "DELETE" });
+        break;
+
+      case "restoreMerchant":
+        result = await apiRequest(`/merchants/${values.merchantId}/restore`, {
+          method: "POST",
+          body: {
+            directorApproved: true,
+            newStatus: values.newStatus || "NORMAL"
+          }
+        });
         break;
       default:
         throw new Error(`Unknown action: ${action}`);

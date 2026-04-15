@@ -1018,15 +1018,27 @@ final class Database {
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> deleteProduct(String productId) throws SQLException {
-        try (Connection connection = connect();
-             PreparedStatement ps = connection.prepareStatement("DELETE FROM products WHERE product_id = ?")) {
-            ps.setString(1, productId);
-            if (ps.executeUpdate() == 0) {
-                // exception thrown if attempting to delete product that does not exist
-                throw new ApiException(404, "Product not found");
+        try (Connection connection = connect()) {
+            // Check if product has any order items
+            try (PreparedStatement check = connection.prepareStatement(
+                    "SELECT COUNT(*) FROM order_items WHERE product_id = ?")) {
+                check.setString(1, productId);
+                try (ResultSet rs = check.executeQuery()) {
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        throw new ApiException(400, "Cannot delete product - it has " + rs.getInt(1) +
+                                " existing orders. The product is archived instead.");
+                    }
+                }
+            }
+
+            try (PreparedStatement ps = connection.prepareStatement("DELETE FROM products WHERE product_id = ?")) {
+                ps.setString(1, productId);
+                if (ps.executeUpdate() == 0) {
+                    throw new ApiException(404, "Product not found");
+                }
             }
         }
-        return Map.of("message", "Product deleted");
+        return Map.of("message", "Product deleted successfully");
     }
 
     /**
