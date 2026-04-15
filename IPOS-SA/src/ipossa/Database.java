@@ -223,7 +223,7 @@ final class Database {
      * a new session is stored, and the returned map contains the authenticated user's identity, role,
      * optional merchant details, and any account warnings.
      *
-     * @param email the user's email address
+     * @param username the user's username
      * @param password the user's password
      * @return a map containing the login result, including a session token and user details
      * @throws SQLException if a database access error occurs
@@ -545,7 +545,7 @@ final class Database {
         // Password - allow admin to set it, or use default
         String password = JsonUtil.optionalString(body, "password");
         if (password == null || password.isBlank()) {
-            password = "Welcome123!";  // Default password if not provided
+            password = "Welcome123!";
         }
 
         // Optional fields
@@ -559,16 +559,36 @@ final class Database {
         String now = now();
 
         try (Connection connection = connect()) {
+            // CHECK: Does merchant ID already exist?
+            try (PreparedStatement check = connection.prepareStatement("SELECT merchant_id FROM merchants WHERE merchant_id = ?")) {
+                check.setString(1, merchantId);
+                try (ResultSet rs = check.executeQuery()) {
+                    if (rs.next()) {
+                        throw new ApiException(400, "Merchant ID '" + merchantId + "' is already taken. Please choose a different Merchant ID.");
+                    }
+                }
+            }
+
+            // CHECK: Does email/username already exist?
+            try (PreparedStatement checkUser = connection.prepareStatement("SELECT username FROM users WHERE username = ?")) {
+                checkUser.setString(1, username);
+                try (ResultSet rs = checkUser.executeQuery()) {
+                    if (rs.next()) {
+                        throw new ApiException(400, "Email '" + email + "' is already registered. Please use a different email address.");
+                    }
+                }
+            }
+
             connection.setAutoCommit(false);
             try {
                 // Insert merchant record
                 try (PreparedStatement merchantPs = connection.prepareStatement("""
-                    INSERT INTO merchants (
-                        merchant_id, name, email, address, phone, credit_limit, balance, account_status,
-                        discount_type, fixed_discount_rate, flexible_rate_tier1, flexible_rate_tier2, flexible_rate_tier3,
-                        pending_discount_credit, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, 0, 'NORMAL', ?, ?, ?, ?, ?, 0, ?, ?)
-                    """)) {
+                INSERT INTO merchants (
+                    merchant_id, name, email, address, phone, credit_limit, balance, account_status,
+                    discount_type, fixed_discount_rate, flexible_rate_tier1, flexible_rate_tier2, flexible_rate_tier3,
+                    pending_discount_credit, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, 'NORMAL', ?, ?, ?, ?, ?, 0, ?, ?)
+                """)) {
                     merchantPs.setString(1, merchantId);
                     merchantPs.setString(2, name);
                     merchantPs.setString(3, email);
@@ -585,26 +605,27 @@ final class Database {
                     merchantPs.executeUpdate();
                 }
 
-                // Create user account with email as username and admin-provided password
+                // Create user account
                 try (PreparedStatement userPs = connection.prepareStatement("""
-                    INSERT INTO users (username, password, role, merchant_id, active, created_at)
-                    VALUES (?, ?, 'MERCHANT', ?, 1, ?)
-                    """)) {
+                INSERT INTO users (username, email, password, role, merchant_id, active, created_at)
+                VALUES (?, ?, ?, 'MERCHANT', ?, 1, ?)
+                """)) {
                     userPs.setString(1, username);
-                    userPs.setString(2, password);
-                    userPs.setString(3, merchantId);
-                    userPs.setString(4, now);
+                    userPs.setString(2, email);
+                    userPs.setString(3, password);
+                    userPs.setString(4, merchantId);
+                    userPs.setString(5, now);
                     userPs.executeUpdate();
                 }
 
                 connection.commit();
 
                 return Map.of(
-                        "message", "Merchant account created successfully",
+                        "message", "Merchant account created successfully!",
                         "merchantId", merchantId,
                         "username", username,
                         "password", password,
-                        "note", "Merchant can log in using their email: " + email
+                        "note", "Merchant can log in using username: " + username
                 );
 
             } catch (SQLException ex) {

@@ -36,7 +36,25 @@ export async function runAction(action, form, label) {
         result = await apiRequest(`/merchants/${values.merchantId || state.session.merchantId}`);
         break;
       case "createMerchant":
-        result = await apiRequest("/merchants", { method: "POST", body: { merchantId: values.merchantId, email: values.email, password: values.password, name: values.name, address: values.address, phone: values.phone || "", creditLimit: Number(values.creditLimit), discountType: values.discountType, fixedDiscountRate: Number(values.fixedDiscountRate || 0) } });
+        try {
+          result = await apiRequest("/merchants", {
+            method: "POST",
+            body: {
+              merchantId: values.merchantId,
+              email: values.email,
+              password: values.password,
+              name: values.name,
+              address: values.address,
+              phone: values.phone || "",
+              creditLimit: Number(values.creditLimit),
+              discountType: values.discountType,
+              fixedDiscountRate: Number(values.fixedDiscountRate || 0)
+            }
+          });
+        } catch (error) {
+          // This will now show the friendly message from the backend
+          throw new Error(error.message);
+        }
         break;
       case "updateMerchant":
         result = await apiRequest(`/merchants/${values.merchantId}`, { method: "PUT", body: { name: values.name, email: values.email, address: values.address, creditLimit: Number(values.creditLimit) } });
