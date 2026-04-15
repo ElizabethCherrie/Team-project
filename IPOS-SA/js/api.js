@@ -2,7 +2,7 @@
  * api.js - API communication and session management
  */
 
-import { state, pageMap, seededCredentials } from "./config.js";
+import { state } from "./config.js";
 
 export async function apiRequest(path, options = {}) {
   if (!state.apiBase) throw new Error("API base URL is missing.");
@@ -46,21 +46,4 @@ export async function bootstrap() {
     window.location.href = "login.html";
     return false;
   }
-}
-
-export async function switchDemoRole(role) {
-  const creds = seededCredentials[role];
-
-  const response = await fetch(`${state.apiBase}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(creds),
-  });
-  const text = await response.text();
-  const session = text ? JSON.parse(text) : {};
-  if (!response.ok) {
-    throw new Error(session.error || `Role switch failed with ${response.status}`);
-  }
-  sessionStorage.setItem("iposSaSession", JSON.stringify(session));
-  state.session = session;
 }

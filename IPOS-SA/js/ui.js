@@ -1,16 +1,13 @@
-import { state, pageMap, profileDirectory, roleModules, personaTabs, actionDescriptions, actionIcons } from "./config.js";
+import { state, profileDirectory, roleModules, actionDescriptions, actionIcons } from "./config.js";
 import { escapeHtml, prettyRole, formatWarning } from "./utils.js";
-import { switchDemoRole } from "./api.js";
 import { openActionWorkspace } from "./workspace.js";
 
-let statusBanner, sessionCard, dashboardGrid, pageNav, personaTabsContainer, workspaceTitle, workspaceBody;
+let statusBanner, sessionCard, dashboardGrid, workspaceTitle, workspaceBody;
 
-export function initializeUI(banner, session, dashboard, nav, tabs, wsTitle, wsBody) {
+export function initializeUI(banner, session, dashboard, wsTitle, wsBody) {
   statusBanner = banner;
   sessionCard = session;
   dashboardGrid = dashboard;
-  pageNav = nav;
-  personaTabsContainer = tabs;
   workspaceTitle = wsTitle;
   workspaceBody = wsBody;
 }
@@ -77,46 +74,6 @@ function getVisibleModules() {
   return roleModules[state.page] || [];
 }
 
-export function renderNavigation() {
-  if (!pageNav) return;
-  pageNav.innerHTML = "";
-  const entries = [["Dashboard", "ALL"], ["Administration", "ADMINISTRATOR"], ["Manager", "MANAGER"], ["Operations", "OPERATIONS_STAFF"], ["Accounting", "ACCOUNTING_STAFF"], ["Merchant", "MERCHANT"]];
-  for (const [label, key] of entries) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "seed-btn";
-    button.textContent = label;
-    if (state.page === key) button.classList.add("nav-active");
-    button.addEventListener("click", async () => {
-      if (key === "ALL" || state.session.role === key) {
-        window.location.href = pageMap[key];
-        return;
-      }
-      try {
-        await switchDemoRole(key);
-        window.location.href = pageMap[key];
-      } catch (error) {
-        setBanner(error.message, "error");
-      }
-    });
-    pageNav.appendChild(button);
-  }
-}
-
-export function renderPersonaTabs() {
-  if (!personaTabsContainer) return;
-  personaTabsContainer.innerHTML = "";
-  const tabs = personaTabs[state.page] || personaTabs.ALL;
-  tabs.forEach((label, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "seed-btn";
-    button.textContent = label;
-    if (index === 0) button.classList.add("nav-active");
-    personaTabsContainer.appendChild(button);
-  });
-}
-
 export function resetWorkspace() {
   workspaceTitle.textContent = "Activity Stream";
   workspaceBody.innerHTML = `<div class="workspace-empty"><div><p class="eyebrow">Workspace</p><h3>Activity Stream</h3><p class="muted">Open an action card above to drive the live API and capture printable output here.</p></div></div>`;
@@ -138,8 +95,6 @@ export function getWorkspaceElements() {
     statusBanner,
     sessionCard,
     dashboardGrid,
-    pageNav,
-    personaTabsContainer,
     workspaceTitle,
     workspaceBody,
   };

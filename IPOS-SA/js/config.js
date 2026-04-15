@@ -13,23 +13,6 @@ export const pageMap = {
   MERCHANT: "merchant.html",
 };
 
-export const seededCredentials = {
-  ADMINISTRATOR: { email: "sysdba@infopharma.local", password: "London_weighting" },
-  MANAGER: { email: "ops.director@infopharma.local", password: "Get_it_done" },
-  OPERATIONS_STAFF: { email: "delivery@infopharma.local", password: "Too_dark" },
-  ACCOUNTING_STAFF: { email: "accountant@infopharma.local", password: "Count_money" },
-  MERCHANT: { email: "citypharmacy@example.com", password: "northampton" },
-};
-
-export const personaTabs = {
-  ALL: ["Sysdba", "manager", "accountant", "city"],
-  ADMINISTRATOR: ["Sysdba", "manager", "accountant", "delivery"],
-  MANAGER: ["manager", "warehouse1", "warehouse2", "delivery"],
-  OPERATIONS_STAFF: ["delivery", "warehouse1", "warehouse2"],
-  ACCOUNTING_STAFF: ["accountant", "clerk", "manager"],
-  MERCHANT: ["city", "cosymed", "hello"],
-};
-
 export const profileDirectory = {
   Sysdba: ["System DBA", "sysdba@infopharma.local", "Administrator", "ADM-001"],
   manager: ["Director of Operations", "ops.director@infopharma.local", "Director of Operations", "MGR-001"],

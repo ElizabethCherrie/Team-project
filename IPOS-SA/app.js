@@ -4,8 +4,6 @@ import {
   initializeUI,
   renderSession,
   renderDashboard,
-  renderNavigation,
-  renderPersonaTabs,
   resetWorkspace,
   setBanner,
 } from "./js/ui.js";
@@ -21,10 +19,8 @@ async function initializeApp() {
   const workspaceTitle = document.querySelector("#workspace-title");
   const clearOutputButton = document.querySelector("#clear-output");
   const logoutButton = document.querySelector("#logout-button");
-  const pageNav = document.querySelector("#page-nav");
-  const personaTabsContainer = document.querySelector("#persona-tabs");
 
-  initializeUI(statusBanner, sessionCard, dashboardGrid, pageNav, personaTabsContainer, workspaceTitle, workspaceBody);
+  initializeUI(statusBanner, sessionCard, dashboardGrid, workspaceTitle, workspaceBody);
   initializeWorkspace(workspaceBody, workspaceTitle);
   initializeOutputElements(workspaceBody, workspaceTitle);
   initializeActions(statusBanner);
@@ -37,8 +33,6 @@ async function initializeApp() {
 
   const success = await bootstrap();
   if (success) {
-    renderNavigation();
-    renderPersonaTabs();
     renderSession();
     renderDashboard();
     resetWorkspace();
