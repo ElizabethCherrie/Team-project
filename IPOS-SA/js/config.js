@@ -209,6 +209,14 @@ export const roleModules = {
       ],
       buttons: [["Delete Catalogue Product", "deleteProduct"]],
     },
+    {
+      pill: "Admin",
+      desc: "Delete merchant and ALL associated data (orders, invoices, payments) - shows cascade",
+      fields: [
+        ["merchantId", "Merchant ID to Delete", ""]
+      ],
+      buttons: [["Test Cascaded Delete", "testCascadeDelete"]],
+    },
   ],
 
   MANAGER: [
@@ -364,6 +372,12 @@ export const roleModules = {
         ["Record Cheque Payment", "recordPayment"],
         ["Merchant Balance", "merchantBalance"],
       ],
+    },
+    {
+      pill: "Operations",
+      desc: "View orders that are not yet delivered (pending)",
+      fields: [],
+      buttons: [["View Pending Orders", "listPendingOrders"]],
     },
   ],
   MERCHANT: [

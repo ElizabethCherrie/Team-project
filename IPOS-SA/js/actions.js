@@ -78,30 +78,6 @@ export async function runAction(action, form, label) {
       case "updateDiscount":
         result = await apiRequest(`/merchants/${values.merchantId}/discount-plan`, { method: "PUT", body: { discountType: values.discountType, fixedDiscountRate: Number(values.fixedDiscountRate || 0) } });
         break;
-      case "reportLowStock":
-        result = await apiRequest("/reports/low-stock");
-        break;
-      case "reportTurnover":
-        result = await apiRequest(`/reports/turnover?start=${values.start}&end=${values.end}`);
-        break;
-      case "reportStockTurnover":
-        result = await apiRequest(`/reports/stock-turnover?start=${values.start}&end=${values.end}`);
-        break;
-      case "reportMerchantOrders":
-        result = await apiRequest(`/reports/merchant-orders?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
-        break;
-      case "reportMerchantActivity":
-        result = await apiRequest(`/reports/merchant-activity?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
-        break;
-      case "reportMerchantInvoices":
-        result = await apiRequest(`/reports/merchant-invoices?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
-        break;
-      case "reportCompanyInvoices":
-        result = await apiRequest(`/reports/company-invoices?start=${values.start}&end=${values.end}`);
-        break;
-      case "reportDebtorReminders":
-        result = await apiRequest("/reports/debtor-reminders");
-        break;
       case "integrationStatus":
         result = await apiRequest("/integrations");
         break;
@@ -252,6 +228,70 @@ export async function runAction(action, form, label) {
             newStatus: values.newStatus || "NORMAL"
           }
         });
+        break;
+      case "reportLowStock":
+        result = await apiRequest("/reports/low-stock");
+        if (result.printableText) {
+          appendPrintable("Low Stock Report", result.printableText);
+        }
+        break;
+
+      case "reportTurnover":
+        result = await apiRequest(`/reports/turnover?start=${values.start}&end=${values.end}`);
+        if (result.printableText) {
+          appendPrintable("Turnover Report", result.printableText);
+        }
+        break;
+
+      case "reportStockTurnover":
+        result = await apiRequest(`/reports/stock-turnover?start=${values.start}&end=${values.end}`);
+        if (result.printableText) {
+          appendPrintable("Stock Turnover Report", result.printableText);
+        }
+        break;
+
+      case "reportMerchantOrders":
+        result = await apiRequest(`/reports/merchant-orders?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
+        if (result.printableText) {
+          appendPrintable("Merchant Orders Report", result.printableText);
+        }
+        break;
+
+      case "reportMerchantActivity":
+        result = await apiRequest(`/reports/merchant-activity?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
+        if (result.printableText) {
+          appendPrintable("Merchant Activity Report", result.printableText);
+        }
+        break;
+
+      case "reportMerchantInvoices":
+        result = await apiRequest(`/reports/merchant-invoices?merchantId=${values.merchantId}&start=${values.start}&end=${values.end}`);
+        if (result.printableText) {
+          appendPrintable("Merchant Invoices Report", result.printableText);
+        }
+        break;
+
+      case "reportCompanyInvoices":
+        result = await apiRequest(`/reports/company-invoices?start=${values.start}&end=${values.end}`);
+        if (result.printableText) {
+          appendPrintable("Company Invoices Report", result.printableText);
+        }
+        break;
+
+      case "reportDebtorReminders":
+        result = await apiRequest("/reports/debtor-reminders");
+        if (result.printableText) {
+          appendPrintable("Debtor Reminders Report", result.printableText);
+        }
+        break;
+      case "testCascadeDelete":
+        // First check what will be deleted
+        const checkResult = await apiRequest(`/merchants/${values.merchantId}`);
+        appendOutput("Before Delete - Merchant Details", checkResult);
+
+        // Then delete
+        result = await apiRequest(`/merchants/${values.merchantId}`, { method: "DELETE" });
+        appendOutput("Cascade Delete Result", result);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);
