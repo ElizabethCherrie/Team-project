@@ -353,64 +353,6 @@ export function formatHumanReadable(data, action) {
   return `<pre class="json-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
 }
 
-function formatOrderTable(orders) {
-  let html = '<div class="data-table-wrapper"><table class="data-table">';
-  html += `<thead><tr>
-    <th>Order ID</th>
-    <th>Date</th>
-    <th>Status</th>
-    <th>Total</th>
-    <th>Dispatch Info</th>
-  </tr></thead><tbody>`;
-
-  for (const o of orders) {
-    const statusClass = `status-${(o.status || '').toLowerCase()}`;
-    let dispatchInfo = '-';
-    if (o.courier) {
-      dispatchInfo = `${escapeHtml(o.courier)}<br><small>Tracking: ${escapeHtml(o.tracking_number || '-')}<br>Expected: ${o.expected_delivery || '-'}</small>`;
-    }
-
-    html += `<tr>
-      <td>${o.order_id || o.orderId}</td>
-      <td>${(o.order_date || '').substring(0, 10)}</td>
-      <td><span class="status-badge ${statusClass}">${o.status || 'PENDING'}</span></td>
-      <td>£${parseFloat(o.total_amount || o.totalAmount || 0).toFixed(2)}</td>
-      <td>${dispatchInfo}</td>
-    </tr>`;
-  }
-
-  html += '</tbody></table></div>';
-  return html;
-}
-
-function formatInvoiceTable(invoices) {
-  let html = '<div class="data-table-wrapper"><table class="data-table">';
-  html += `<thead><tr>
-    <th>Invoice ID</th>
-    <th>Order ID</th>
-    <th>Issue Date</th>
-    <th>Due Date</th>
-    <th>Total</th>
-    <th>Paid</th>
-    <th>Status</th>
-  </tr></thead><tbody>`;
-
-  for (const inv of invoices) {
-    html += `<tr>
-      <td>${inv.invoice_id}</td>
-      <td>${inv.order_id}</td>
-      <td>${inv.issue_date || '-'}</td>
-      <td>${inv.due_date || '-'}</td>
-      <td>£${parseFloat(inv.total_amount).toFixed(2)}</td>
-      <td>£${parseFloat(inv.paid_amount || 0).toFixed(2)}</td>
-      <td><span class="status-badge status-${(inv.status || '').toLowerCase()}">${inv.status || 'ISSUED'}</span></td>
-    </tr>`;
-  }
-
-  html += '</tbody></table></div>';
-  return html;
-}
-
 export function formatOrderTable(orders) {
   let html = '<div class="data-table-wrapper"><table class="data-table">';
   html += `<thead><tr>
