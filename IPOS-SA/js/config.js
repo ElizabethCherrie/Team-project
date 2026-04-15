@@ -14,11 +14,11 @@ export const pageMap = {
 };
 
 export const seededCredentials = {
-  ADMINISTRATOR: { username: "Sysdba", password: "London_weighting" },
-  MANAGER: { username: "manager", password: "Get_it_done" },
-  OPERATIONS_STAFF: { username: "delivery", password: "Too_dark" },
-  ACCOUNTING_STAFF: { username: "accountant", password: "Count_money" },
-  MERCHANT: { username: "city", password: "northampton" },
+  ADMINISTRATOR: { email: "sysdba@infopharma.local", password: "London_weighting" },
+  MANAGER: { email: "ops.director@infopharma.local", password: "Get_it_done" },
+  OPERATIONS_STAFF: { email: "delivery@infopharma.local", password: "Too_dark" },
+  ACCOUNTING_STAFF: { email: "accountant@infopharma.local", password: "Count_money" },
+  MERCHANT: { email: "citypharmacy@example.com", password: "northampton" },
 };
 
 export const personaTabs = {

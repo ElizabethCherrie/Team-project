@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS products (
 
 CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(128) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(64) NOT NULL,
     merchant_id VARCHAR(64),
