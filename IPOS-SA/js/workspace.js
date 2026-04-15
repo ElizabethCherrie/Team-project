@@ -29,6 +29,8 @@ export function openActionWorkspace(module, label, action) {
   grid.className = "two-up";
 
   for (const [name, fieldLabel, value, type] of module.fields) {
+    if (name === "search" && action === "listProducts") continue;
+
     const labelNode = document.createElement("label");
     labelNode.style.position = "relative";
     labelNode.textContent = fieldLabel;

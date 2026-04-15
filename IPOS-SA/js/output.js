@@ -10,6 +10,18 @@ export function initializeOutputElements(body, title) {
 }
 
 export function appendOutput(title, payload) {
+  if (title === "View All Products" && workspaceBody) {
+    const matches = Array.from(workspaceBody.querySelectorAll('.output-block')).filter(b => {
+      const strong = b.querySelector('.output-meta strong');
+      return strong && strong.textContent === title;
+    });
+    if (matches.length) {
+      matches.forEach(m => m.remove());
+      if (workspaceTitle) workspaceTitle.textContent = 'Activity Stream';
+      return;
+    }
+  }
+
   const block = document.createElement("div");
   block.className = "output-block";
   const humanReadable = formatHumanReadable(payload, title);
