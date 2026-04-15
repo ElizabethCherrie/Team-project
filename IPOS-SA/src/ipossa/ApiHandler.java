@@ -125,7 +125,7 @@ final class ApiHandler implements HttpHandler {
         if ("POST".equals(method) && "login".equals(parts.get(1))) {
             // Read credentials once before validating required fields.
             Map<String, Object> body = body(exchange);
-            writeJson(exchange, 200, db.login(JsonUtil.requireString(body, "username"), JsonUtil.requireString(body, "password")));
+            writeJson(exchange, 200, db.login(JsonUtil.requireString(body, "email"), JsonUtil.requireString(body, "password")));
             return;
         }
         if ("GET".equals(method) && "session".equals(parts.get(1))) {

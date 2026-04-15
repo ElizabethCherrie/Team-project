@@ -60,6 +60,7 @@ final class Database {
             statement.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         username TEXT PRIMARY KEY,
+                        email TEXT NOT NULL,
                         password TEXT NOT NULL,
                         role TEXT NOT NULL,
                         merchant_id TEXT,
@@ -215,6 +216,7 @@ final class Database {
             ensureColumn(statement, "non_commercial_applications", "company_name", "TEXT");
             ensureColumn(statement, "non_commercial_applications", "company_address", "TEXT");
             ensureColumn(statement, "non_commercial_applications", "company_registration", "TEXT");
+            ensureColumn(statement, "users", "email", "TEXT NOT NULL DEFAULT ''");
         }
         // runs seed function to populate db with initial data
         seed();
@@ -227,20 +229,20 @@ final class Database {
      * a new session is stored, and the returned map contains the authenticated user's identity, role,
      * optional merchant details, and any account warnings.
      *
-     * @param username the user's username
+     * @param email the user's email address
      * @param password the user's password
      * @return a map containing the login result, including a session token and user details
      * @throws SQLException if a database access error occurs
      */
-    Map<String, Object> login(String username, String password) throws SQLException {
+    Map<String, Object> login(String email, String password) throws SQLException {
         try (Connection connection = connect();
              // retrieves user details
              PreparedStatement ps = connection.prepareStatement("""
-                     SELECT username, role, merchant_id, active
+                     SELECT username, email, role, merchant_id, active
                      FROM users
-                     WHERE username = ? AND password = ?
+                     WHERE email = ? AND password = ?
                      """)) {
-            ps.setString(1, username);
+            ps.setString(1, email);
             ps.setString(2, password);
             // checks if credentials valid
             try (ResultSet rs = ps.executeQuery()) {
@@ -269,6 +271,7 @@ final class Database {
                 }
                 // handels responses
                 response.put("username", rs.getString("username"));
+                response.put("email", rs.getString("email"));
                 response.put("role", rs.getString("role"));
                 response.put("merchantId", rs.getString("merchant_id"));
                 response.put("sessionToken", sessionToken);
@@ -302,6 +305,7 @@ final class Database {
             // creates map for response
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("username", auth.username());
+            response.put("email", auth.email());
             response.put("role", auth.role());
             response.put("merchantId", auth.merchantId());
             response.put("sessionToken", headers.getFirst("X-Session-Token"));
@@ -331,7 +335,7 @@ final class Database {
     List<Map<String, Object>> listUsers() throws SQLException {
         try (Connection connection = connect();
              Statement statement = connection.createStatement();
-             ResultSet rs = statement.executeQuery("SELECT username, role, merchant_id, active, created_at FROM users ORDER BY username")) {
+             ResultSet rs = statement.executeQuery("SELECT username, email, role, merchant_id, active, created_at FROM users ORDER BY username")) {
             return rows(rs);
         }
     }
@@ -349,15 +353,16 @@ final class Database {
     Map<String, Object> createUser(Map<String, Object> body) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement ps = connection.prepareStatement("""
-                     INSERT INTO users (username, password, role, merchant_id, active, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?)
+                     INSERT INTO users (username, email, password, role, merchant_id, active, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)
                      """)) {
             ps.setString(1, JsonUtil.requireString(body, "username"));
-            ps.setString(2, JsonUtil.requireString(body, "password"));
-            ps.setString(3, JsonUtil.requireUpper(body, "role"));
-            ps.setString(4, JsonUtil.optionalString(body, "merchantId"));
-            ps.setInt(5, body.containsKey("active") && !JsonUtil.requireBoolean(body, "active") ? 0 : 1);
-            ps.setString(6, now());
+            ps.setString(2, JsonUtil.requireString(body, "email"));
+            ps.setString(3, JsonUtil.requireString(body, "password"));
+            ps.setString(4, JsonUtil.requireUpper(body, "role"));
+            ps.setString(5, JsonUtil.optionalString(body, "merchantId"));
+            ps.setInt(6, body.containsKey("active") && !JsonUtil.requireBoolean(body, "active") ? 0 : 1);
+            ps.setString(7, now());
             ps.executeUpdate();
         }
         return Map.of("message", "User created");
@@ -2117,16 +2122,16 @@ final class Database {
         try (Connection connection = connect()) {
             // seeds database if database empty
             if (count(connection, "users") == 0) {
-                insertUser(connection, "Sysdba", "London_weighting", "ADMINISTRATOR", null);
-                insertUser(connection, "manager", "Get_it_done", "MANAGER", null);
-                insertUser(connection, "accountant", "Count_money", "ACCOUNTING_STAFF", null);
-                insertUser(connection, "clerk", "Paperwork", "ACCOUNTING_STAFF", null);
-                insertUser(connection, "warehouse1", "Get_a_beer", "OPERATIONS_STAFF", null);
-                insertUser(connection, "warehouse2", "Lot_smell", "OPERATIONS_STAFF", null);
-                insertUser(connection, "delivery", "Too_dark", "OPERATIONS_STAFF", null);
-                insertUser(connection, "city", "northampton", "MERCHANT", "ACC0001");
-                insertUser(connection, "cosymed", "bondstreet", "MERCHANT", "ACC0002");
-                insertUser(connection, "hello", "there", "MERCHANT", "ACC0003");
+                insertUser(connection, "Sysdba", "sysdba@infopharma.local", "London_weighting", "ADMINISTRATOR", null);
+                insertUser(connection, "manager", "ops.director@infopharma.local", "Get_it_done", "MANAGER", null);
+                insertUser(connection, "accountant", "accountant@infopharma.local", "Count_money", "ACCOUNTING_STAFF", null);
+                insertUser(connection, "clerk", "clerk@infopharma.local", "Paperwork", "ACCOUNTING_STAFF", null);
+                insertUser(connection, "warehouse1", "warehouse1@infopharma.local", "Get_a_beer", "OPERATIONS_STAFF", null);
+                insertUser(connection, "warehouse2", "warehouse2@infopharma.local", "Lot_smell", "OPERATIONS_STAFF", null);
+                insertUser(connection, "delivery", "delivery@infopharma.local", "Too_dark", "OPERATIONS_STAFF", null);
+                insertUser(connection, "city", "citypharmacy@example.com", "northampton", "MERCHANT", "ACC0001");
+                insertUser(connection, "cosymed", "cosymed@example.com", "bondstreet", "MERCHANT", "ACC0002");
+                insertUser(connection, "hello", "hello@example.com", "there", "MERCHANT", "ACC0003");
             }
             if (count(connection, "merchants") == 0) {
                 insertMerchant(connection, "ACC0001", "CityPharmacy", "citypharmacy@example.com",
@@ -3244,16 +3249,17 @@ final class Database {
      * @param merchantId the optional merchant identifier associated with the user
      * @throws SQLException if a database access error occurs
      */
-    private void insertUser(Connection connection, String username, String password, String role, String merchantId) throws SQLException {
+    private void insertUser(Connection connection, String username, String email, String password, String role, String merchantId) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement("""
-                INSERT INTO users (username, password, role, merchant_id, active, created_at)
-                VALUES (?, ?, ?, ?, 1, ?)
+                INSERT INTO users (username, email, password, role, merchant_id, active, created_at)
+                VALUES (?, ?, ?, ?, ?, 1, ?)
                 """)) {
             ps.setString(1, username);
-            ps.setString(2, password);
-            ps.setString(3, role);
-            ps.setString(4, merchantId);
-            ps.setString(5, now());
+            ps.setString(2, email);
+            ps.setString(3, password);
+            ps.setString(4, role);
+            ps.setString(5, merchantId);
+            ps.setString(6, now());
             ps.executeUpdate();
         }
     }
@@ -3357,7 +3363,7 @@ final class Database {
             throw new ApiException(401, "Missing X-Session-Token header");
         }
         try (PreparedStatement ps = connection.prepareStatement("""
-                SELECT s.username, s.role, s.merchant_id, u.active
+                SELECT s.username, s.role, s.merchant_id, u.active, u.email
                 FROM sessions s
                 JOIN users u ON u.username = s.username
                 WHERE s.session_token = ?
@@ -3370,7 +3376,7 @@ final class Database {
                 if (rs.getInt("active") != 1) {
                     throw new ApiException(403, "Account is inactive");
                 }
-                return new AuthContext(rs.getString("username"), rs.getString("role"), rs.getString("merchant_id"));
+                return new AuthContext(rs.getString("username"), rs.getString("email"), rs.getString("role"), rs.getString("merchant_id"));
             }
         }
     }
@@ -3506,7 +3512,7 @@ final class Database {
      * @param role the authenticated role
      * @param merchantId the merchant linked to the session, when applicable
      */
-    record AuthContext(String username, String role, String merchantId) {}
+    record AuthContext(String username, String email, String role, String merchantId) {}
 
     /**
      * Inclusive date range used for report queries.

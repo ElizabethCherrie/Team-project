@@ -7,7 +7,7 @@ bootstrapHandoff();
 
 document.querySelectorAll(".seed-btn").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelector("#username").value = button.dataset.user;
+    document.querySelector("#email").value = button.dataset.email;
     document.querySelector("#password").value = button.dataset.pass;
   });
 });
@@ -23,7 +23,7 @@ loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const apiBase = document.querySelector("#api-base").value.trim().replace(/\/$/, "");
   const payload = {
-    username: document.querySelector("#username").value.trim(),
+    email: document.querySelector("#email").value.trim(),
     password: document.querySelector("#password").value,
   };
 

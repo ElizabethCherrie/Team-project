@@ -22,7 +22,9 @@ export function setBanner(message, kind) {
 
 export function renderSession() {
   const warnings = state.session.warnings || [];
-  const profile = profileDirectory[state.session.username] || [state.session.username, `${state.session.username}@londonsoftwarehouse.com`, prettyRole(state.session.role), state.session.merchantId || state.session.role];
+  const profile = profileDirectory[state.session.username] || [state.session.username, state.session.email || `${state.session.username}@londonsoftwarehouse.com`, prettyRole(state.session.role), state.session.merchantId || state.session.role];
+  // Override email from the session so it always reflects the actual login email
+  const displayEmail = state.session.email || profile[1];
   const initials = profile[0].split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || "").join("");
   sessionCard.innerHTML = `
     <div class="session-layout">
@@ -30,7 +32,8 @@ export function renderSession() {
       <div class="session-meta">
         <div class="session-chip">${escapeHtml(prettyRole(state.session.role))}</div>
         <h3>${escapeHtml(profile[0])}</h3>
-        <p>${escapeHtml(profile[1])}</p>
+        <p class="session-username">${escapeHtml(state.session.username)}</p>
+        <p>${escapeHtml(displayEmail)}</p>
         <p>${escapeHtml(profile[2])}</p>
         <div class="session-badges">
           <span class="profile-badge">${escapeHtml(profile[3])}</span>
