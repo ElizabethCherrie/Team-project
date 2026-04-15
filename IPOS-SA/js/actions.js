@@ -36,7 +36,7 @@ export async function runAction(action, form, label) {
         result = await apiRequest(`/merchants/${values.merchantId || state.session.merchantId}`);
         break;
       case "createMerchant":
-        result = await apiRequest("/merchants", { method: "POST", body: { merchantId: values.merchantId, username: values.username, password: values.password, name: values.name, email: values.email, address: values.address, creditLimit: Number(values.creditLimit), discountType: values.discountType, fixedDiscountRate: Number(values.fixedDiscountRate || 0) } });
+        result = await apiRequest("/merchants", { method: "POST", body: { merchantId: values.merchantId, email: values.email, password: values.password, name: values.name, address: values.address, phone: values.phone || "", creditLimit: Number(values.creditLimit), discountType: values.discountType, fixedDiscountRate: Number(values.fixedDiscountRate || 0) } });
         break;
       case "updateMerchant":
         result = await apiRequest(`/merchants/${values.merchantId}`, { method: "PUT", body: { name: values.name, email: values.email, address: values.address, creditLimit: Number(values.creditLimit) } });

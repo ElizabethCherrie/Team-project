@@ -251,4 +251,34 @@ final class IntegrationClient {
             default -> "OTHER";
         };
     }
+    Map<String, Object> testConnection(String target) {
+        if ("CA".equals(target) && caStockSyncUrl != null) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder(URI.create(caStockSyncUrl + "/health"))
+                        .timeout(Duration.ofSeconds(3))
+                        .GET()
+                        .build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                return Map.of("target", "IPOS-CA", "status", response.statusCode() == 200 ? "ONLINE" : "UNKNOWN",
+                        "url", caStockSyncUrl, "httpStatus", response.statusCode());
+            } catch (Exception e) {
+                return Map.of("target", "IPOS-CA", "status", "OFFLINE", "url", caStockSyncUrl, "error", e.getMessage());
+            }
+        }
+        if ("PU".equals(target) && puPaymentUrl != null) {
+            try {
+                String baseUrl = puPaymentUrl.replace("/pay", "");
+                HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/health"))
+                        .timeout(Duration.ofSeconds(3))
+                        .GET()
+                        .build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                return Map.of("target", "IPOS-PU", "status", response.statusCode() == 200 ? "ONLINE" : "UNKNOWN",
+                        "url", baseUrl, "httpStatus", response.statusCode());
+            } catch (Exception e) {
+                return Map.of("target", "IPOS-PU", "status", "OFFLINE", "url", puPaymentUrl, "error", e.getMessage());
+            }
+        }
+        return Map.of("target", target, "status", "NOT_CONFIGURED");
+    }
 }

@@ -14,13 +14,7 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * SQLite-backed service layer for the IPOS-SA subsystem.
@@ -536,50 +530,78 @@ final class Database {
      * @throws SQLException if a database access error occurs
      */
     Map<String, Object> createMerchant(Map<String, Object> body) throws SQLException {
-        // read in merchant data
+        // Required fields
         String merchantId = JsonUtil.requireString(body, "merchantId");
-        String username = JsonUtil.requireString(body, "username");
-        String password = JsonUtil.requireString(body, "password");
-        // create timestamp to be used for all records
+        String name = JsonUtil.requireString(body, "name");
+        String email = JsonUtil.requireString(body, "email");
+        String address = JsonUtil.requireString(body, "address");
+        double creditLimit = JsonUtil.requireDouble(body, "creditLimit");
+
+        // Password - allow admin to set it, or use default
+        String password = JsonUtil.optionalString(body, "password");
+        if (password == null || password.isBlank()) {
+            password = "Welcome123!";  // Default password if not provided
+        }
+
+        // Optional fields
+        String phone = JsonUtil.optionalString(body, "phone");
+        String discountType = JsonUtil.optionalString(body, "discountType");
+        double fixedDiscountRate = JsonUtil.optionalDouble(body, "fixedDiscountRate", 0);
+
+        // Use email as username
+        String username = email;
+
         String now = now();
+
         try (Connection connection = connect()) {
             connection.setAutoCommit(false);
             try {
-                // create sql statement and add relevant fields for merchant table
+                // Insert merchant record
                 try (PreparedStatement merchantPs = connection.prepareStatement("""
-                        INSERT INTO merchants (
-                            merchant_id, name, email, address, phone, credit_limit, balance, account_status,
-                            discount_type, fixed_discount_rate, flexible_rate_tier1, flexible_rate_tier2, flexible_rate_tier3,
-                            pending_discount_credit, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, 0, 'NORMAL', ?, ?, ?, ?, ?, 0, ?, ?)
-                        """)) {
+                    INSERT INTO merchants (
+                        merchant_id, name, email, address, phone, credit_limit, balance, account_status,
+                        discount_type, fixed_discount_rate, flexible_rate_tier1, flexible_rate_tier2, flexible_rate_tier3,
+                        pending_discount_credit, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 0, 'NORMAL', ?, ?, ?, ?, ?, 0, ?, ?)
+                    """)) {
                     merchantPs.setString(1, merchantId);
-                    merchantPs.setString(2, JsonUtil.requireString(body, "name"));
-                    merchantPs.setString(3, JsonUtil.requireString(body, "email"));
-                    merchantPs.setString(4, JsonUtil.requireString(body, "address"));
-                    merchantPs.setString(5, JsonUtil.optionalString(body, "phone"));
-                    merchantPs.setDouble(6, JsonUtil.requireDouble(body, "creditLimit"));
-                    merchantPs.setString(7, JsonUtil.optionalString(body, "discountType"));
-                    merchantPs.setDouble(8, JsonUtil.optionalDouble(body, "fixedDiscountRate", 0));
-                    merchantPs.setDouble(9, JsonUtil.optionalDouble(body, "flexibleRateTier1", 1));
-                    merchantPs.setDouble(10, JsonUtil.optionalDouble(body, "flexibleRateTier2", 2));
-                    merchantPs.setDouble(11, JsonUtil.optionalDouble(body, "flexibleRateTier3", 3));
+                    merchantPs.setString(2, name);
+                    merchantPs.setString(3, email);
+                    merchantPs.setString(4, address);
+                    merchantPs.setString(5, phone);
+                    merchantPs.setDouble(6, creditLimit);
+                    merchantPs.setString(7, discountType);
+                    merchantPs.setDouble(8, fixedDiscountRate);
+                    merchantPs.setDouble(9, 1.0);
+                    merchantPs.setDouble(10, 2.0);
+                    merchantPs.setDouble(11, 3.0);
                     merchantPs.setString(12, now);
                     merchantPs.setString(13, now);
                     merchantPs.executeUpdate();
                 }
-                // create sql statement and add relevant fields for user table
+
+                // Create user account with email as username and admin-provided password
                 try (PreparedStatement userPs = connection.prepareStatement("""
-                        INSERT INTO users (username, password, role, merchant_id, active, created_at)
-                        VALUES (?, ?, 'MERCHANT', ?, 1, ?)
-                        """)) {
+                    INSERT INTO users (username, password, role, merchant_id, active, created_at)
+                    VALUES (?, ?, 'MERCHANT', ?, 1, ?)
+                    """)) {
                     userPs.setString(1, username);
                     userPs.setString(2, password);
                     userPs.setString(3, merchantId);
                     userPs.setString(4, now);
                     userPs.executeUpdate();
                 }
+
                 connection.commit();
+
+                return Map.of(
+                        "message", "Merchant account created successfully",
+                        "merchantId", merchantId,
+                        "username", username,
+                        "password", password,
+                        "note", "Merchant can log in using their email: " + email
+                );
+
             } catch (SQLException ex) {
                 connection.rollback();
                 throw ex;
@@ -587,7 +609,6 @@ final class Database {
                 connection.setAutoCommit(true);
             }
         }
-        return Map.of("message", "Merchant created", "merchantId", merchantId);
     }
 
     /**
@@ -3527,5 +3548,13 @@ final class Database {
 
     private static OrderSeedLine line(String productId, int quantity, double unitPrice) {
         return new OrderSeedLine(productId, quantity, unitPrice);
+    }
+
+    Map<String, Object> testCaConnection() {
+        return integrationClient.testConnection("CA");
+    }
+
+    Map<String, Object> testPuConnection() {
+        return integrationClient.testConnection("PU");
     }
 }

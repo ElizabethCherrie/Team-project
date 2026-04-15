@@ -197,15 +197,17 @@ export const roleModules = {
   MANAGER: [
     {
       pill: "Manager",
-      desc: "Modify merchant records and settings.",
+      desc: "Create and manage merchant accounts (email is used for login)",
       fields: [
-        ["merchantId", "Merchant ID", "ACC0002"],
-        ["name", "Name", "Cosymed Ltd"],
-        ["email", "Email", "cosymed@example.com"],
-        ["address", "Address", "25, Bond Street, London WC1V 8LS"],
-        ["creditLimit", "Credit Limit", "5000"],
+        ["merchantId", "Merchant ID", "ACC0004"],
+        ["name", "Business Name", "New Pharmacy"],
+        ["email", "Email (Login Username)", "newpharmacy@example.com"],
+        ["password", "Password", "Welcome123!"],
+        ["address", "Business Address", "123 High Street, London"],
+        ["phone", "Phone Number", "020 1234 5678"],
+        ["creditLimit", "Credit Limit (£)", "5000"],
         ["discountType", "Discount Type", "FIXED"],
-        ["fixedDiscountRate", "Fixed Discount Rate", "3"],
+        ["fixedDiscountRate", "Fixed Discount Rate (%)", "3"],
       ],
       buttons: [
         ["Create New Merchant Account", "createMerchant"],

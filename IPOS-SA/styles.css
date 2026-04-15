@@ -966,3 +966,87 @@ button:hover {
     color: #64748b;
     font-size: 12px;
 }
+/* Merchant Details Grid */
+.merchant-details {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #e2e8f0;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.details-grid div {
+    padding: 8px;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+/* Role Badge */
+.role-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: #e0e7ff;
+    color: #3730a3;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Success Message */
+.success-message {
+    background: #d1fae5;
+    border: 1px solid #a7f3d0;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+
+.success-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.success-text {
+    font-size: 18px;
+    font-weight: 600;
+    color: #065f46;
+    margin-bottom: 8px;
+}
+
+.success-detail {
+    color: #047857;
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+/* Report Print */
+.report-print {
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    border: 1px solid #e2e8f0;
+}
+
+/* Details summary */
+details {
+    margin-top: 16px;
+}
+
+summary {
+    cursor: pointer;
+    color: #3b82f6;
+    font-weight: 500;
+}
+
+summary:hover {
+    color: #2563eb;
+}
