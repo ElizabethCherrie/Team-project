@@ -228,15 +228,15 @@ final class Database {
      * @return a map containing the login result, including a session token and user details
      * @throws SQLException if a database access error occurs
      */
-    Map<String, Object> login(String email, String password) throws SQLException {
+    Map<String, Object> login(String username, String password) throws SQLException {
         try (Connection connection = connect();
              // retrieves user details
              PreparedStatement ps = connection.prepareStatement("""
                      SELECT username, email, role, merchant_id, active
                      FROM users
-                     WHERE email = ? AND password = ?
+                     WHERE username = ? AND password = ?
                      """)) {
-            ps.setString(1, email);
+            ps.setString(1, username);
             ps.setString(2, password);
             // checks if credentials valid
             try (ResultSet rs = ps.executeQuery()) {
