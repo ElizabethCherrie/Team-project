@@ -21,10 +21,10 @@ public class Main {
             Reporting_API reporting = new Reporting_API(
                     accountManagement, orderManagement, productCatalogue);
 
-            System.out.println("✓ Account Management initialized");
-            System.out.println("✓ Product Catalogue initialized");
-            System.out.println("✓ Order Management initialized");
-            System.out.println("✓ Reporting initialized\n");
+            System.out.println("Account Management initialized");
+            System.out.println("Product Catalogue initialized");
+            System.out.println("Order Management initialized");
+            System.out.println("Reporting initialized\n");
 
             // Create a sample merchant
             System.out.println("Creating sample merchant...");
@@ -37,11 +37,11 @@ public class Main {
             merchant.setStatus("ACTIVE");
 
             if (accountManagement.CreateMerchant(merchant)) {
-                System.out.println("✓ Merchant created successfully");
+                System.out.println("Merchant created successfully");
                 System.out.println("  Name: " + merchant.getName());
                 System.out.println("  Credit Limit: £" + merchant.getCreditLimit());
             } else {
-                System.out.println("✗ Failed to create merchant");
+                System.out.println("Failed to create merchant");
             }
             System.out.println();
 
@@ -76,7 +76,7 @@ public class Main {
 
             try {
                 String orderID = orderManagement.createOrder(order);
-                System.out.println("✓ Order created successfully");
+                System.out.println("Order created successfully");
                 System.out.println("  Order ID: " + orderID);
 
                 double orderTotal = orderManagement.calculateOrderTotal(orderID);
@@ -85,7 +85,7 @@ public class Main {
                 // Store the order ID for later use
                 System.out.println("  Note: Order ID is " + orderID + " (use this for invoice)");
             } catch (Exception e) {
-                System.out.println("✗ Failed to create order: " + e.getMessage());
+                System.out.println("Failed to create order: " + e.getMessage());
             }
             System.out.println();
 
@@ -99,7 +99,7 @@ public class Main {
                     Invoice invoice = orderManagement.raiseInvoice(latestOrderID);
 
                     if (invoice != null) {
-                        System.out.println("✓ Invoice created successfully");
+                        System.out.println("Invoice created successfully");
                         System.out.println("  Invoice ID: " + invoice.getInvoiceID());
                         System.out.println("  Order ID: " + invoice.getOrderID());
                         System.out.println("  Amount: £" + String.format("%.2f", invoice.getTotalAmount()));
@@ -118,7 +118,7 @@ public class Main {
             System.out.println("Generating reports...");
 
             Report stockReport = reporting.generateStockReport();
-            System.out.println("✓ Stock Report generated");
+            System.out.println("Stock Report generated");
             System.out.println("  Title: " + stockReport.getTitle());
 
             String contentPreview = stockReport.getContent();
@@ -129,7 +129,7 @@ public class Main {
 
             // Generate merchant report
             Report merchantReport = reporting.generateMerchantReport("M001");
-            System.out.println("✓ Merchant Report generated");
+            System.out.println("Merchant Report generated");
             System.out.println("  Title: " + merchantReport.getTitle());
 
             System.out.println("\nSystem ready for use!\n");

@@ -1,6 +1,6 @@
 import { state } from "./config.js";
 import { apiRequest } from "./api.js";
-import { appendOutput, appendPrintable } from "./output.js";
+import { appendOutput, appendPrintable, refreshOutputBlock, appendInlineError, appendInlineSuccess } from "./output.js";
 import { showOrderBuilder, initializeOrderBuilder } from "./order-builder.js";
 import { labelForAction } from "./ui.js";
 
@@ -12,8 +12,11 @@ export function initializeActions(banner) {
 }
 
 function setBanner(message, kind) {
-  statusBannerElement.textContent = message;
-  statusBannerElement.className = `status-banner ${kind}`;
+  if (kind === "error") {
+    appendInlineError(message);
+  } else {
+    appendInlineSuccess(message);
+  }
 }
 
 export async function runAction(action, form, label) {
@@ -182,12 +185,41 @@ export async function runAction(action, form, label) {
       case "getOrder":
         result = await apiRequest(`/orders/${values.orderId}`);
         break;
-      case "updateOrderStatus":
+      case "updateOrderStatus": {
         if (label === "Record Card Payment") values.method = "CARD";
         if (label === "Record Bank Transfer") values.method = "BANK_TRANSFER";
         if (label === "Record Cheque Payment") values.method = "CHEQUE";
-        result = await apiRequest(`/orders/${values.orderId}/status`, { method: "POST", body: { status: values.status, courier: values.courier, trackingNumber: values.trackingNumber, expectedDelivery: values.expectedDelivery, dispatchedBy: values.dispatchedBy } });
+        if (label === "Enter Dispatch Details") values.status = "DISPATCHED";
+        if (label === "Change Status to Delivered") {
+          values.status = "DELIVERED";
+          const current = await apiRequest(`/orders/${values.orderId}`);
+          const currentStatus = (current.status || "").toUpperCase();
+          if (currentStatus !== "DISPATCHED") {
+            appendInlineError(`Order #${values.orderId} cannot be marked Delivered — current status is ${currentStatus || "unknown"} (must be DISPATCHED).`);
+            return;
+          }
+        }
+        if (label === "Change Status to Accepted") {
+          values.status = "ACCEPTED";
+          const current = await apiRequest(`/orders/${values.orderId}`);
+          const currentStatus = (current.status || "").toUpperCase();
+          if (currentStatus !== "PENDING") {
+            appendInlineError(`Order #${values.orderId} cannot be marked Accepted — current status is ${currentStatus || "unknown"} (must be PENDING).`);
+            return;
+          }
+        }
+        const statusBody = (label === "Change Status to Delivered" || label === "Change Status to Accepted")
+          ? { status: values.status }
+          : { status: values.status, courier: values.courier, trackingNumber: values.trackingNumber, expectedDelivery: values.expectedDelivery, dispatchedBy: values.dispatchedBy };
+        result = await apiRequest(`/orders/${values.orderId}/status`, { method: "POST", body: statusBody });
+        if (label === "Enter Dispatch Details" || label === "Change Status to Delivered" || label === "Change Status to Accepted") {
+          const pending = await apiRequest("/orders/pending");
+          refreshOutputBlock("View Pending Orders", pending);
+          const all = await apiRequest("/orders");
+          refreshOutputBlock("View All Orders", all);
+        }
         break;
+      }
       case "generateInvoice":
         result = await apiRequest(`/orders/${values.orderId}/invoice`, { method: "POST" });
         break;

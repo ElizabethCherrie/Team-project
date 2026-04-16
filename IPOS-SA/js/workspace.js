@@ -30,6 +30,12 @@ export function openActionWorkspace(module, label, action) {
 
   for (const [name, fieldLabel, value, type] of module.fields) {
     if (name === "search" && action === "listProducts") continue;
+    if (action === "listPendingOrders") continue;
+    if (action === "listOrders") continue;
+    if (action === "viewOrders") continue;
+    if (action === "changeOrderStatus") continue;
+    if (label === "Change Status to Delivered" && name !== "orderId") continue;
+    if (label === "Change Status to Accepted" && name !== "orderId") continue;
 
     const labelNode = document.createElement("label");
     labelNode.style.position = "relative";
@@ -80,17 +86,68 @@ export function openActionWorkspace(module, label, action) {
   form.appendChild(grid);
   const actions = document.createElement("div");
   actions.className = "workspace-actions";
-  const submit = document.createElement("button");
-  submit.type = "button";
-  submit.textContent = label;
-  submit.addEventListener("click", () => runAction(action, form, label));
-  const reset = document.createElement("button");
-  reset.type = "reset";
-  reset.className = "ghost-btn";
-  reset.textContent = "Reset";
-  actions.appendChild(submit);
-  actions.appendChild(reset);
+  if (action === "viewOrders") {
+    const btn1 = document.createElement("button");
+    btn1.type = "button";
+    btn1.textContent = "View All Orders";
+    btn1.addEventListener("click", () => runAction("listOrders", form, "View All Orders"));
+    const btn2 = document.createElement("button");
+    btn2.type = "button";
+    btn2.textContent = "View Pending Orders";
+    btn2.addEventListener("click", () => runAction("listPendingOrders", form, "View Pending Orders"));
+    actions.appendChild(btn1);
+    actions.appendChild(btn2);
+  } else if (action === "changeOrderStatus") {
+    shell.appendChild(form);
+    const dualPanel = document.createElement("div");
+    dualPanel.className = "change-status-dual";
+
+    function makeStatusPanel(panelLabel, buttonLabel) {
+      const panel = document.createElement("div");
+      panel.className = "change-status-panel";
+      const heading = document.createElement("h4");
+      heading.textContent = panelLabel;
+      const miniForm = document.createElement("form");
+      miniForm.className = "module-form";
+      const lbl = document.createElement("label");
+      lbl.textContent = "Order ID";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.name = "orderId";
+      input.value = "1";
+      input.autocomplete = "off";
+      lbl.appendChild(input);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = buttonLabel;
+      btn.addEventListener("click", () => runAction("updateOrderStatus", miniForm, buttonLabel));
+      miniForm.appendChild(lbl);
+      miniForm.appendChild(btn);
+      panel.appendChild(heading);
+      panel.appendChild(miniForm);
+      return panel;
+    }
+
+    dualPanel.appendChild(makeStatusPanel("Accept Order", "Change Status to Accepted"));
+    dualPanel.appendChild(makeStatusPanel("Mark as Delivered", "Change Status to Delivered"));
+    shell.appendChild(dualPanel);
+    workspaceBody.appendChild(shell);
+    workspaceBody.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  } else {
+    const submit = document.createElement("button");
+    submit.type = "button";
+    submit.textContent = label;
+    submit.addEventListener("click", () => runAction(action, form, label));
+    const reset = document.createElement("button");
+    reset.type = "reset";
+    reset.className = "ghost-btn";
+    reset.textContent = "Reset";
+    actions.appendChild(submit);
+    actions.appendChild(reset);
+  }
   form.appendChild(actions);
   shell.appendChild(form);
   workspaceBody.appendChild(shell);
+  workspaceBody.scrollIntoView({ behavior: "smooth", block: "start" });
 }

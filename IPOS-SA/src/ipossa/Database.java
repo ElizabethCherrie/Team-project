@@ -13,6 +13,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -211,6 +212,8 @@ final class Database {
             ensureColumn(statement, "non_commercial_applications", "company_address", "TEXT");
             ensureColumn(statement, "non_commercial_applications", "company_registration", "TEXT");
             ensureColumn(statement, "users", "email", "TEXT NOT NULL DEFAULT ''");
+            // Migrate legacy ACCEPTED status to PENDING
+            statement.execute("UPDATE orders SET status = 'PENDING' WHERE status = 'ACCEPTED'");
         }
         // runs seed function to populate db with initial data
         seed();
@@ -1303,7 +1306,7 @@ final class Database {
                 long orderId;
                 try (PreparedStatement insert = connection.prepareStatement("""
                     INSERT INTO orders (merchant_id, order_date, status, subtotal, discount_amount, total_amount)
-                    VALUES (?, ?, 'ACCEPTED', ?, ?, ?)
+                    VALUES (?, ?, 'PENDING', ?, ?, ?)
                     """, Statement.RETURN_GENERATED_KEYS)) {
                     insert.setString(1, merchantId);
                     insert.setString(2, now());
@@ -1489,7 +1492,7 @@ final class Database {
      */
     Map<String, Object> updateOrderStatus(long orderId, Map<String, Object> body) throws SQLException {
         String newStatus = JsonUtil.requireUpper(body, "status");
-        if (!List.of("ACCEPTED", "PROCESSING", "DISPATCHED", "DELIVERED").contains(newStatus)) {
+        if (!List.of("PENDING", "ACCEPTED", "PROCESSING", "DISPATCHED", "DELIVERED").contains(newStatus)) {
             throw new ApiException(400, "Invalid order status");
         }
 
@@ -1503,19 +1506,20 @@ final class Database {
 
             // Validate expected delivery is a future date
             String expectedDelivery = JsonUtil.requireString(body, "expectedDelivery");
+            LocalDate expectedDate;
             try {
-                LocalDate expectedDate = LocalDate.parse(expectedDelivery);
-                if (expectedDate.isBefore(LocalDate.now())) {
-                    throw new ApiException(400, "Expected delivery date must be today or in the future");
-                }
-            } catch (Exception e) {
+                expectedDate = LocalDate.parse(expectedDelivery);
+            } catch (DateTimeParseException e) {
                 throw new ApiException(400, "Invalid expected delivery date format. Use YYYY-MM-DD");
+            }
+            if (expectedDate.isBefore(LocalDate.now())) {
+                throw new ApiException(400, "Expected delivery date must be today or in the future");
             }
         }
 
         try (Connection connection = connect()) {
             Map<String, Object> order = getOrderById(connection, orderId);
-            String currentStatus = Objects.toString(order.get("status"), "ACCEPTED");
+            String currentStatus = Objects.toString(order.get("status"), "PENDING");
 
             if (!isValidOrderTransition(currentStatus, newStatus)) {
                 throw new ApiException(400, "Invalid order transition from " + currentStatus + " to " + newStatus);
@@ -3489,7 +3493,7 @@ final class Database {
     /**
      * Determines whether an order can transition from its current status to a new status.
      * <p>
-     * The allowed flow is ACCEPTED → PROCESSING → DISPATCHED → DELIVERED. A status may also remain
+     * The allowed flow is PENDING → PROCESSING → DISPATCHED → DELIVERED. A status may also remain
      * unchanged.
      *
      * @param currentStatus the order's current status
@@ -3500,8 +3504,11 @@ final class Database {
         if (Objects.equals(currentStatus, newStatus)) {
             return true;
         }
+        
+        // This switch logic was changed and requires clearing up
         return switch (currentStatus) {
-            case "ACCEPTED" -> "PROCESSING".equals(newStatus);
+            case "PENDING" -> "ACCEPTED".equals(newStatus) || "PROCESSING".equals(newStatus) || "DISPATCHED".equals(newStatus);
+            case "ACCEPTED" -> "PROCESSING".equals(newStatus) || "DISPATCHED".equals(newStatus);
             case "PROCESSING" -> "DISPATCHED".equals(newStatus);
             case "DISPATCHED" -> "DELIVERED".equals(newStatus);
             default -> false;
