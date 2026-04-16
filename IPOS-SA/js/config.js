@@ -43,6 +43,7 @@ export const actionDescriptions = {
   setMinStock: "Update the minimum stock threshold for a product.",
   listUsers: "View all login users for the subsystem.",
   createUser: "Create a subsystem login account.",
+  updateUser: "Update a subsystem login account and role assignment.",
   deleteUser: "Delete a subsystem login account.",
   merchantBalance: "Check the merchant balance and current account status.",
   viewMerchantReminders: "View reminder and account-warning information for the current merchant.",
@@ -96,6 +97,7 @@ export const actionIcons = {
   setMinStock: "T",
   listUsers: "U",
   createUser: "+",
+  updateUser: "E",
   deleteUser: "-",
   merchantBalance: "£",
   viewMerchantReminders: "!",
@@ -136,13 +138,21 @@ export const roleModules = {
   ADMINISTRATOR: [
     {
       pill: "Admin",
-      desc: "Authenticate and manage subsystem users.",
+      desc: "Create, view, update, and delete subsystem users.",
       fields: [
         ["username", "Username", "demo_user"],
+        ["email", "Email", "demo.user@infopharma.local"],
         ["password", "Password", "demo123"],
         ["role", "Role", "OPERATIONS_STAFF"],
+        ["merchantId", "Merchant ID (for merchant users)", ""],
+        ["active", "Active (true/false)", "true"],
       ],
-      buttons: [["Login Authentication", "loginAuthentication"]],
+      buttons: [
+        ["List User Accounts", "listUsers"],
+        ["Create User Account", "createUser"],
+        ["Update User Account", "updateUser"],
+        ["Delete User Account", "deleteUser"],
+      ],
     },
     {
       pill: "Admin",
@@ -158,39 +168,28 @@ export const roleModules = {
         ["minimumStockLevel", "Minimum Stock", "10"],
       ],
       buttons: [
+        ["View Catalogue", "listProducts"],
         ["Create Catalogue Item", "createProduct"],
         ["Update Catalogue Item", "updateProduct"],
         ["View Catalogue Item", "getProduct"],
         ["Delete Catalogue Item", "deleteProduct"],
+        ["Restock Product", "restockProduct"],
+        ["Set Minimum Stock", "setMinStock"],
       ],
     },
     {
       pill: "Admin",
-      desc: "Subsystem reporting actions.",
+      desc: "Administration reporting actions.",
       fields: [
+        ["merchantId", "Merchant ID", "ACC0001"],
         ["start", "Start", "2026-03-01"],
         ["end", "End", "2026-03-31"],
       ],
       buttons: [
-        ["Generate Subsystem Report", "reportTurnover"],
-        ["Print Subsystem Report", "reportCompanyInvoices"],
+        ["Low Stock Report", "reportLowStock"],
+        ["Turnover Report", "reportTurnover"],
+        ["Company Invoices Report", "reportCompanyInvoices"],
       ],
-    },
-    {
-      pill: "Admin",
-      desc: "Delete system users",
-      fields: [
-        ["username", "Username", ""]
-      ],
-      buttons: [["Delete User Account", "deleteUser"]],
-    },
-    {
-      pill: "Admin",
-      desc: "Delete a product from catalogue (fails if product has orders)",
-      fields: [
-        ["productId", "Product ID", ""]
-      ],
-      buttons: [["Delete Catalogue Product", "deleteProduct"]],
     },
     {
       pill: "Admin",
@@ -208,6 +207,7 @@ export const roleModules = {
       desc: "Create and manage merchant accounts (email is used for login)",
       fields: [
         ["merchantId", "Merchant ID", "ACC0004"],
+        ["merchantSearch", "Merchant Search", "ACC0001"],
         ["name", "Business Name", "New Pharmacy"],
         ["email", "Email (Login Username)", "newpharmacy@example.com"],
         ["password", "Password", "Welcome123!"],
@@ -220,22 +220,31 @@ export const roleModules = {
       buttons: [
         ["Create New Merchant Account", "createMerchant"],
         ["Update Merchant Details", "updateMerchant"],
+        ["List Merchants", "listMerchants"],
+        ["Search Merchants", "searchMerchants"],
         ["View Merchant Information", "getMerchant"],
+        ["View Merchant Balance", "merchantBalance"],
         ["Modify Merchant Settings", "updateDiscount"],
       ],
     },
     {
       pill: "Manager",
-      desc: "Reporting and invoice actions.",
+      desc: "Reporting and invoice actions required for the demo.",
       fields: [
-        ["merchantId", "Merchant ID", "ACC0003"],
+        ["merchantId", "Merchant ID", "ACC0001"],
         ["invoiceId", "Invoice ID", "1"],
         ["start", "Start", "2026-03-01"],
         ["end", "End", "2026-03-31"],
       ],
       buttons: [
-        ["Generate Subsystem Report", "reportTurnover"],
-        ["Print Subsystem Report", "reportCompanyInvoices"],
+        ["Low Stock Report", "reportLowStock"],
+        ["Turnover Report", "reportTurnover"],
+        ["Stock Turnover Report", "reportStockTurnover"],
+        ["Merchant Orders Report", "reportMerchantOrders"],
+        ["Merchant Activity Report", "reportMerchantActivity"],
+        ["Merchant Invoices Report", "reportMerchantInvoices"],
+        ["Company Invoices Report", "reportCompanyInvoices"],
+        ["Debtor Reminders Report", "reportDebtorReminders"],
         ["Display Invoice", "getInvoice"],
         ["Print Invoice", "printInvoice"],
       ],
@@ -317,6 +326,8 @@ export const roleModules = {
         ["dispatchedBy", "Dispatched By", "delivery"],
       ],
       buttons: [
+        ["View Pending Orders", "listPendingOrders"],
+        ["View Order Details", "getOrder"],
         ["Enter Dispatch Details", "updateOrderStatus"],
         ["Update Order Status", "updateOrderStatus"],
         ["Generate Invoice", "generateInvoice"],
@@ -357,10 +368,20 @@ export const roleModules = {
       ],
     },
     {
-      pill: "Operations",
-      desc: "View orders that are not yet delivered (pending)",
-      fields: [],
-      buttons: [["View Pending Orders", "listPendingOrders"]],
+      pill: "Accounting",
+      desc: "Review overdue debtors and invoice output.",
+      fields: [
+        ["merchantId", "Merchant ID", "ACC0001"],
+        ["invoiceId", "Invoice ID", "1"],
+        ["start", "Start", "2026-03-01"],
+        ["end", "End", "2026-03-31"],
+      ],
+      buttons: [
+        ["View Merchant Balance", "merchantBalance"],
+        ["Debtor Reminders Report", "reportDebtorReminders"],
+        ["View Invoice", "getInvoice"],
+        ["Print Invoice", "printInvoice"],
+      ],
     },
   ],
   MERCHANT: [

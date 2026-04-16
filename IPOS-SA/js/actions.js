@@ -63,7 +63,29 @@ export async function runAction(action, form, label) {
         result = await apiRequest(`/products/${values.productId}/minimum-stock`, { method: "POST", body: { minimumStockLevel: Number(values.minimumStockLevel) } });
         break;
       case "createUser":
-        result = await apiRequest("/users", { method: "POST", body: { username: values.username, password: values.password, role: values.role } });
+        result = await apiRequest("/users", {
+          method: "POST",
+          body: {
+            username: values.username,
+            email: values.email,
+            password: values.password,
+            role: values.role,
+            merchantId: values.merchantId || null,
+            active: values.active !== "false",
+          },
+        });
+        break;
+      case "updateUser":
+        result = await apiRequest(`/users/${values.username}`, {
+          method: "PUT",
+          body: {
+            email: values.email || undefined,
+            password: values.password || undefined,
+            role: values.role || undefined,
+            merchantId: values.merchantId || undefined,
+            active: values.active ? values.active !== "false" : undefined,
+          },
+        });
         break;
       case "merchantBalance":
         result = await apiRequest(`/merchants/${values.merchantId || state.session.merchantId}/balance`);

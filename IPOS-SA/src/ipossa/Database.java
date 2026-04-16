@@ -378,18 +378,20 @@ final class Database {
              //sql statement
              PreparedStatement ps = connection.prepareStatement("""
                      UPDATE users
-                     SET password = COALESCE(?, password),
+                     SET email = COALESCE(?, email),
+                         password = COALESCE(?, password),
                          role = COALESCE(?, role),
                          merchant_id = COALESCE(?, merchant_id),
                          active = COALESCE(?, active)
                      WHERE username = ?
                      """)) {
             // data to be updated
-            setNullable(ps, 1, body.containsKey("password") ? ipossa.JsonUtil.requireString(body, "password") : null);
-            setNullable(ps, 2, body.containsKey("role") ? ipossa.JsonUtil.requireUpper(body, "role") : null);
-            setNullable(ps, 3, body.containsKey("merchantId") ? JsonUtil.optionalString(body, "merchantId") : null);
-            setNullable(ps, 4, body.containsKey("active") ? (JsonUtil.requireBoolean(body, "active") ? 1 : 0) : null);
-            ps.setString(5, username);
+            setNullable(ps, 1, body.containsKey("email") ? JsonUtil.requireString(body, "email") : null);
+            setNullable(ps, 2, body.containsKey("password") ? ipossa.JsonUtil.requireString(body, "password") : null);
+            setNullable(ps, 3, body.containsKey("role") ? ipossa.JsonUtil.requireUpper(body, "role") : null);
+            setNullable(ps, 4, body.containsKey("merchantId") ? JsonUtil.optionalString(body, "merchantId") : null);
+            setNullable(ps, 5, body.containsKey("active") ? (JsonUtil.requireBoolean(body, "active") ? 1 : 0) : null);
+            ps.setString(6, username);
             if (ps.executeUpdate() == 0) {
                 throw new ApiException(404, "User not found");
             }
@@ -836,19 +838,35 @@ final class Database {
         if (!List.of("NORMAL", "SUSPENDED").contains(newStatus)) {
             throw new ApiException(400, "newStatus must be NORMAL or SUSPENDED");
         }
-        // creates sql and adds required data
-        try (Connection connection = connect();
-             PreparedStatement ps = connection.prepareStatement("""
-                     UPDATE merchants
-                     SET account_status = ?, updated_at = ?
-                     WHERE merchant_id = ?
-                     """)) {
-            ps.setString(1, newStatus);
-            ps.setString(2, now());
-            ps.setString(3, merchantId);
-            // throws error if trying to update merchant that dosent exist
-            if (ps.executeUpdate() == 0) {
-                throw new ApiException(404, "Merchant not found");
+        try (Connection connection = connect()) {
+            Map<String, Object> merchant = getMerchantById(connection, merchantId);
+            String currentStatus = Objects.toString(merchant.get("account_status"), "NORMAL");
+            MerchantDebtStatus debtStatus = merchantDebtStatus(connection, merchantId);
+
+            if ("NORMAL".equals(newStatus) && debtStatus.hasOverdueInvoices()) {
+                throw new ApiException(400, "Merchant cannot be restored to NORMAL until all overdue invoices are cleared by payment");
+            }
+            if ("NORMAL".equals(newStatus) && debtStatus.outstandingBalance() > 0) {
+                throw new ApiException(400, "Merchant cannot be restored to NORMAL while an outstanding balance remains");
+            }
+            if ("SUSPENDED".equals(newStatus) && !debtStatus.hasOverdueInvoices()) {
+                throw new ApiException(400, "Merchant cannot remain SUSPENDED when no overdue invoices remain");
+            }
+            if (!"IN_DEFAULT".equals(currentStatus) && "NORMAL".equals(newStatus)) {
+                throw new ApiException(400, "Restore flow is intended for merchants currently in default");
+            }
+
+            try (PreparedStatement ps = connection.prepareStatement("""
+                    UPDATE merchants
+                    SET account_status = ?, updated_at = ?
+                    WHERE merchant_id = ?
+                    """)) {
+                ps.setString(1, newStatus);
+                ps.setString(2, now());
+                ps.setString(3, merchantId);
+                if (ps.executeUpdate() == 0) {
+                    throw new ApiException(404, "Merchant not found");
+                }
             }
         }
         return Map.of("message", "Merchant restored", "newStatus", newStatus);
@@ -1031,6 +1049,12 @@ final class Database {
                 }
             }
 
+            try (PreparedStatement deleteMovements = connection.prepareStatement(
+                    "DELETE FROM stock_movements WHERE product_id = ?")) {
+                deleteMovements.setString(1, productId);
+                deleteMovements.executeUpdate();
+            }
+
             try (PreparedStatement ps = connection.prepareStatement("DELETE FROM products WHERE product_id = ?")) {
                 ps.setString(1, productId);
                 if (ps.executeUpdate() == 0) {
@@ -1038,7 +1062,7 @@ final class Database {
                 }
             }
         }
-        return Map.of("message", "Product deleted successfully");
+        return Map.of("message", "Product deleted");
     }
 
     /**
@@ -1330,18 +1354,17 @@ final class Database {
                     updateMerchant.executeUpdate();
                 }
 
-                Map<String, Object> invoice = generateInvoice(connection, orderId);
                 connection.commit();
 
                 // P0 FIX: Return discount info in response for frontend display
                 Map<String, Object> response = new LinkedHashMap<>();
                 response.put("message", "Order created");
                 response.put("orderId", orderId);
-                response.put("invoice", invoice);
                 response.put("totalAmount", totalAmount);
                 response.put("subtotal", subtotal);
                 response.put("discountAmount", discountAmount);
                 response.put("discountApplied", discountAmount > 0);
+                response.put("invoiceGenerated", false);
                 if ("FIXED".equalsIgnoreCase(discountType) && discountAmount > 0) {
                     response.put("discountRate", merchant.get("fixed_discount_rate"));
                     response.put("discountType", "FIXED");
@@ -2359,6 +2382,34 @@ final class Database {
             }
         }
         return Map.of("merchantId", merchantId, "accountStatus", newStatus, "warnings", warnings, "maxOverdueDays", maxOverdueDays);
+    }
+
+    private MerchantDebtStatus merchantDebtStatus(Connection connection, String merchantId) throws SQLException {
+        double outstandingBalance = 0;
+        boolean hasOverdueInvoices = false;
+        try (PreparedStatement ps = connection.prepareStatement("""
+                SELECT due_date, total_amount, paid_amount, status
+                FROM invoices
+                WHERE merchant_id = ?
+                """)) {
+            ps.setString(1, merchantId);
+            try (ResultSet rs = ps.executeQuery()) {
+                LocalDate today = LocalDate.now();
+                while (rs.next()) {
+                    double totalAmount = rs.getDouble("total_amount");
+                    double paidAmount = rs.getDouble("paid_amount");
+                    double remaining = Math.max(0, totalAmount - paidAmount);
+                    outstandingBalance += remaining;
+                    if (remaining > 0 && !"PAID".equalsIgnoreCase(rs.getString("status"))) {
+                        LocalDate dueDate = LocalDate.parse(rs.getString("due_date"));
+                        if (dueDate.isBefore(today)) {
+                            hasOverdueInvoices = true;
+                        }
+                    }
+                }
+            }
+        }
+        return new MerchantDebtStatus(outstandingBalance, hasOverdueInvoices);
     }
 
     /**
@@ -3575,6 +3626,8 @@ final class Database {
      * @param end the range end date
      */
     private record Range(LocalDate start, LocalDate end) {}
+
+    private record MerchantDebtStatus(double outstandingBalance, boolean hasOverdueInvoices) {}
 
     /**
      * Represents one line item used while seeding historical orders.
