@@ -333,10 +333,6 @@ export function formatHumanReadable(data, action) {
   // SUCCESS MESSAGE
   if (data.message && !data.orderId && !data.invoice_id) {
     let icon = '';
-    if (data.message.toLowerCase().includes('deleted')) icon = '🗑️';
-    else if (data.message.toLowerCase().includes('updated')) icon = '✏️';
-    else if (data.message.toLowerCase().includes('created')) icon = '➕';
-    else icon = '✅';
 
     return `
       <div class="success-message">

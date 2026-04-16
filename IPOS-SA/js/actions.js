@@ -1,6 +1,6 @@
 import { state } from "./config.js";
 import { apiRequest } from "./api.js";
-import { appendOutput, appendPrintable, refreshOutputBlock, appendInlineError } from "./output.js";
+import { appendOutput, appendPrintable, refreshOutputBlock, appendInlineError, appendInlineSuccess } from "./output.js";
 import { showOrderBuilder, initializeOrderBuilder } from "./order-builder.js";
 import { labelForAction } from "./ui.js";
 
@@ -12,8 +12,11 @@ export function initializeActions(banner) {
 }
 
 function setBanner(message, kind) {
-  statusBannerElement.textContent = message;
-  statusBannerElement.className = `status-banner ${kind}`;
+  if (kind === "error") {
+    appendInlineError(message);
+  } else {
+    appendInlineSuccess(message);
+  }
 }
 
 export async function runAction(action, form, label) {

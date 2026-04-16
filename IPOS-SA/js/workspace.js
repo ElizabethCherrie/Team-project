@@ -32,6 +32,7 @@ export function openActionWorkspace(module, label, action) {
     if (name === "search" && action === "listProducts") continue;
     if (action === "listPendingOrders") continue;
     if (action === "listOrders") continue;
+    if (action === "viewOrders") continue;
     if (label === "Change Status to Delivered" && name !== "orderId") continue;
 
     const labelNode = document.createElement("label");
@@ -83,16 +84,29 @@ export function openActionWorkspace(module, label, action) {
   form.appendChild(grid);
   const actions = document.createElement("div");
   actions.className = "workspace-actions";
-  const submit = document.createElement("button");
-  submit.type = "button";
-  submit.textContent = label;
-  submit.addEventListener("click", () => runAction(action, form, label));
-  const reset = document.createElement("button");
-  reset.type = "reset";
-  reset.className = "ghost-btn";
-  reset.textContent = "Reset";
-  actions.appendChild(submit);
-  actions.appendChild(reset);
+  if (action === "viewOrders") {
+    const btn1 = document.createElement("button");
+    btn1.type = "button";
+    btn1.textContent = "View All Orders";
+    btn1.addEventListener("click", () => runAction("listOrders", form, "View All Orders"));
+    const btn2 = document.createElement("button");
+    btn2.type = "button";
+    btn2.textContent = "View Pending Orders";
+    btn2.addEventListener("click", () => runAction("listPendingOrders", form, "View Pending Orders"));
+    actions.appendChild(btn1);
+    actions.appendChild(btn2);
+  } else {
+    const submit = document.createElement("button");
+    submit.type = "button";
+    submit.textContent = label;
+    submit.addEventListener("click", () => runAction(action, form, label));
+    const reset = document.createElement("button");
+    reset.type = "reset";
+    reset.className = "ghost-btn";
+    reset.textContent = "Reset";
+    actions.appendChild(submit);
+    actions.appendChild(reset);
+  }
   form.appendChild(actions);
   shell.appendChild(form);
   workspaceBody.appendChild(shell);

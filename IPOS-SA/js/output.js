@@ -59,6 +59,17 @@ export function appendInlineError(message) {
   block.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+export function appendInlineSuccess(message) {
+  if (!workspaceBody) return;
+  const existing = workspaceBody.querySelector(".inline-success-block");
+  if (existing) existing.remove();
+  const block = document.createElement("div");
+  block.className = "inline-success-block";
+  block.textContent = message;
+  workspaceBody.prepend(block);
+  setTimeout(() => block.remove(), 4000);
+}
+
 export function refreshOutputBlock(title, payload) {
   if (!workspaceBody) return;
   const existing = Array.from(workspaceBody.querySelectorAll(".output-block")).find((b) => {
