@@ -146,6 +146,7 @@ export const roleModules = {
       desc: "Authenticate and manage subsystem users.",
       fields: [
         ["username", "Username", "demo_user"],
+  ["email", "Email", "demo_user@example.com"],
         ["password", "Password", "demo123"],
         ["role", "Role", "OPERATIONS_STAFF"],
       ],
