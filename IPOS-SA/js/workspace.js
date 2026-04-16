@@ -33,7 +33,9 @@ export function openActionWorkspace(module, label, action) {
     if (action === "listPendingOrders") continue;
     if (action === "listOrders") continue;
     if (action === "viewOrders") continue;
+    if (action === "changeOrderStatus") continue;
     if (label === "Change Status to Delivered" && name !== "orderId") continue;
+    if (label === "Change Status to Accepted" && name !== "orderId") continue;
 
     const labelNode = document.createElement("label");
     labelNode.style.position = "relative";
@@ -95,6 +97,43 @@ export function openActionWorkspace(module, label, action) {
     btn2.addEventListener("click", () => runAction("listPendingOrders", form, "View Pending Orders"));
     actions.appendChild(btn1);
     actions.appendChild(btn2);
+  } else if (action === "changeOrderStatus") {
+    shell.appendChild(form);
+    const dualPanel = document.createElement("div");
+    dualPanel.className = "change-status-dual";
+
+    function makeStatusPanel(panelLabel, buttonLabel) {
+      const panel = document.createElement("div");
+      panel.className = "change-status-panel";
+      const heading = document.createElement("h4");
+      heading.textContent = panelLabel;
+      const miniForm = document.createElement("form");
+      miniForm.className = "module-form";
+      const lbl = document.createElement("label");
+      lbl.textContent = "Order ID";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.name = "orderId";
+      input.value = "1";
+      input.autocomplete = "off";
+      lbl.appendChild(input);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = buttonLabel;
+      btn.addEventListener("click", () => runAction("updateOrderStatus", miniForm, buttonLabel));
+      miniForm.appendChild(lbl);
+      miniForm.appendChild(btn);
+      panel.appendChild(heading);
+      panel.appendChild(miniForm);
+      return panel;
+    }
+
+    dualPanel.appendChild(makeStatusPanel("Accept Order", "Change Status to Accepted"));
+    dualPanel.appendChild(makeStatusPanel("Mark as Delivered", "Change Status to Delivered"));
+    shell.appendChild(dualPanel);
+    workspaceBody.appendChild(shell);
+    workspaceBody.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
   } else {
     const submit = document.createElement("button");
     submit.type = "button";

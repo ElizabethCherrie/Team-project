@@ -1492,7 +1492,7 @@ final class Database {
      */
     Map<String, Object> updateOrderStatus(long orderId, Map<String, Object> body) throws SQLException {
         String newStatus = JsonUtil.requireUpper(body, "status");
-        if (!List.of("PENDING", "PROCESSING", "DISPATCHED", "DELIVERED").contains(newStatus)) {
+        if (!List.of("PENDING", "ACCEPTED", "PROCESSING", "DISPATCHED", "DELIVERED").contains(newStatus)) {
             throw new ApiException(400, "Invalid order status");
         }
 
@@ -3507,7 +3507,8 @@ final class Database {
         
         // This switch logic was changed and requires clearing up
         return switch (currentStatus) {
-            case "PENDING" -> "PROCESSING".equals(newStatus) || "DISPATCHED".equals(newStatus);
+            case "PENDING" -> "ACCEPTED".equals(newStatus) || "PROCESSING".equals(newStatus) || "DISPATCHED".equals(newStatus);
+            case "ACCEPTED" -> "PROCESSING".equals(newStatus) || "DISPATCHED".equals(newStatus);
             case "PROCESSING" -> "DISPATCHED".equals(newStatus);
             case "DISPATCHED" -> "DELIVERED".equals(newStatus);
             default -> false;

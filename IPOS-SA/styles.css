@@ -415,6 +415,26 @@ button:hover {
     font-size: 14px;
 }
 
+.change-status-dual {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 0 24px 24px;
+}
+
+.change-status-panel {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.change-status-panel h4 {
+    margin: 0 0 14px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -875,6 +895,7 @@ button:hover {
 }
 
 .status-pending { background: #dbeafe; color: #1e40af; }
+.status-accepted { background: #e0f2fe; color: #075985; }
 .status-processing { background: #fef3c7; color: #92400e; }
 .status-dispatched { background: #d1fae5; color: #065f46; }
 .status-delivered { background: #dcfce7; color: #166534; }
@@ -1195,6 +1216,7 @@ summary:hover {
 }
 
 .status-pending { background: rgba(64, 106, 210, 0.2); color: #dce8ff; }
+.status-accepted { background: rgba(7, 89, 133, 0.25); color: #bae6fd; }
 .status-processing { background: rgba(191, 137, 29, 0.22); color: #ffe9b8; }
 .status-dispatched { background: rgba(31, 156, 122, 0.2); color: #cdf7ea; }
 .status-delivered { background: rgba(48, 167, 95, 0.2); color: #d4fad8; }

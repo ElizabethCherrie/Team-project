@@ -199,11 +199,20 @@ export async function runAction(action, form, label) {
             return;
           }
         }
-        const statusBody = label === "Change Status to Delivered"
+        if (label === "Change Status to Accepted") {
+          values.status = "ACCEPTED";
+          const current = await apiRequest(`/orders/${values.orderId}`);
+          const currentStatus = (current.status || "").toUpperCase();
+          if (currentStatus !== "PENDING") {
+            appendInlineError(`Order #${values.orderId} cannot be marked Accepted — current status is ${currentStatus || "unknown"} (must be PENDING).`);
+            return;
+          }
+        }
+        const statusBody = (label === "Change Status to Delivered" || label === "Change Status to Accepted")
           ? { status: values.status }
           : { status: values.status, courier: values.courier, trackingNumber: values.trackingNumber, expectedDelivery: values.expectedDelivery, dispatchedBy: values.dispatchedBy };
         result = await apiRequest(`/orders/${values.orderId}/status`, { method: "POST", body: statusBody });
-        if (label === "Enter Dispatch Details" || label === "Change Status to Delivered") {
+        if (label === "Enter Dispatch Details" || label === "Change Status to Delivered" || label === "Change Status to Accepted") {
           const pending = await apiRequest("/orders/pending");
           refreshOutputBlock("View Pending Orders", pending);
           const all = await apiRequest("/orders");
