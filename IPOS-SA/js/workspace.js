@@ -30,6 +30,9 @@ export function openActionWorkspace(module, label, action) {
 
   for (const [name, fieldLabel, value, type] of module.fields) {
     if (name === "search" && action === "listProducts") continue;
+    if (action === "listPendingOrders") continue;
+    if (action === "listOrders") continue;
+    if (label === "Change Status to Delivered" && name !== "orderId") continue;
 
     const labelNode = document.createElement("label");
     labelNode.style.position = "relative";
@@ -93,4 +96,5 @@ export function openActionWorkspace(module, label, action) {
   form.appendChild(actions);
   shell.appendChild(form);
   workspaceBody.appendChild(shell);
+  workspaceBody.scrollIntoView({ behavior: "smooth", block: "start" });
 }

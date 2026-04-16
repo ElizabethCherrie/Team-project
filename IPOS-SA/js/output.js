@@ -10,7 +10,7 @@ export function initializeOutputElements(body, title) {
 }
 
 export function appendOutput(title, payload) {
-  if (title === "View All Products" && workspaceBody) {
+  if ((title === "View All Products" || title === "View Pending Orders" || title === "View All Orders") && workspaceBody) {
     const matches = Array.from(workspaceBody.querySelectorAll('.output-block')).filter(b => {
       const strong = b.querySelector('.output-meta strong');
       return strong && strong.textContent === title;
@@ -46,4 +46,15 @@ export function appendPrintable(title, text, autoPrint = false) {
   block.querySelector(".print-btn").addEventListener("click", () => openPrintWindow(title, text));
   workspaceBody.appendChild(block);
   if (autoPrint) openPrintWindow(title, text);
+}
+
+export function refreshOutputBlock(title, payload) {
+  if (!workspaceBody) return;
+  const existing = Array.from(workspaceBody.querySelectorAll(".output-block")).find((b) => {
+    const strong = b.querySelector(".output-meta strong");
+    return strong && strong.textContent === title;
+  });
+  if (!existing) return;
+  existing.remove();
+  appendOutput(title, payload);
 }

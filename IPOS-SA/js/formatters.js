@@ -320,7 +320,7 @@ export function formatHumanReadable(data, action) {
           ${discountHtml}
           <div class="total-row grand-total">Total: £${escapeHtml(String(data.totalAmount || '0'))}</div>
         </div>
-        <div class="order-status">Status: ${escapeHtml(String(data.status || 'ACCEPTED'))}</div>
+        <div class="order-status">Status: ${escapeHtml(String(data.status || 'PENDING'))}</div>
       </div>
     `;
   }
