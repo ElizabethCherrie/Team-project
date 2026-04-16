@@ -1,6 +1,6 @@
 import { state } from "./config.js";
 import { apiRequest } from "./api.js";
-import { appendOutput, appendPrintable, refreshOutputBlock } from "./output.js";
+import { appendOutput, appendPrintable, refreshOutputBlock, appendInlineError } from "./output.js";
 import { showOrderBuilder, initializeOrderBuilder } from "./order-builder.js";
 import { labelForAction } from "./ui.js";
 
@@ -187,7 +187,15 @@ export async function runAction(action, form, label) {
         if (label === "Record Bank Transfer") values.method = "BANK_TRANSFER";
         if (label === "Record Cheque Payment") values.method = "CHEQUE";
         if (label === "Enter Dispatch Details") values.status = "DISPATCHED";
-        if (label === "Change Status to Delivered") values.status = "DELIVERED";
+        if (label === "Change Status to Delivered") {
+          values.status = "DELIVERED";
+          const current = await apiRequest(`/orders/${values.orderId}`);
+          const currentStatus = (current.status || "").toUpperCase();
+          if (currentStatus !== "DISPATCHED") {
+            appendInlineError(`Order #${values.orderId} cannot be marked Delivered — current status is ${currentStatus || "unknown"} (must be DISPATCHED).`);
+            return;
+          }
+        }
         const statusBody = label === "Change Status to Delivered"
           ? { status: values.status }
           : { status: values.status, courier: values.courier, trackingNumber: values.trackingNumber, expectedDelivery: values.expectedDelivery, dispatchedBy: values.dispatchedBy };

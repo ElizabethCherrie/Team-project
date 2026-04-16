@@ -48,6 +48,17 @@ export function appendPrintable(title, text, autoPrint = false) {
   if (autoPrint) openPrintWindow(title, text);
 }
 
+export function appendInlineError(message) {
+  if (!workspaceBody) return;
+  const existing = workspaceBody.querySelector(".inline-error-block");
+  if (existing) existing.remove();
+  const block = document.createElement("div");
+  block.className = "inline-error-block";
+  block.textContent = message;
+  workspaceBody.prepend(block);
+  block.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
 export function refreshOutputBlock(title, payload) {
   if (!workspaceBody) return;
   const existing = Array.from(workspaceBody.querySelectorAll(".output-block")).find((b) => {
