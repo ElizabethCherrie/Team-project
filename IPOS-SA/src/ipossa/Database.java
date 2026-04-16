@@ -13,6 +13,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -1505,13 +1506,14 @@ final class Database {
 
             // Validate expected delivery is a future date
             String expectedDelivery = JsonUtil.requireString(body, "expectedDelivery");
+            LocalDate expectedDate;
             try {
-                LocalDate expectedDate = LocalDate.parse(expectedDelivery);
-                if (expectedDate.isBefore(LocalDate.now())) {
-                    throw new ApiException(400, "Expected delivery date must be today or in the future");
-                }
-            } catch (Exception e) {
+                expectedDate = LocalDate.parse(expectedDelivery);
+            } catch (DateTimeParseException e) {
                 throw new ApiException(400, "Invalid expected delivery date format. Use YYYY-MM-DD");
+            }
+            if (expectedDate.isBefore(LocalDate.now())) {
+                throw new ApiException(400, "Expected delivery date must be today or in the future");
             }
         }
 
