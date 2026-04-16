@@ -315,6 +315,10 @@ export async function runAction(action, form, label) {
         result = await apiRequest(`/merchants/${values.merchantId}`, { method: "DELETE" });
         appendOutput("Cascade Delete Result", result);
         break;
+      case "listOrders":
+        result = await apiRequest("/orders");
+        break;
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }

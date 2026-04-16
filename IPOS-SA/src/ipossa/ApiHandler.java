@@ -39,7 +39,7 @@ final class ApiHandler implements HttpHandler {
         this.db = db;
         this.staticRoot = staticRoot.normalize();
     }
-    
+
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -220,7 +220,7 @@ final class ApiHandler implements HttpHandler {
                 return;
             }
             if (parts.size() == 3 && "restore".equals(parts.get(2)) && "POST".equals(method)) {
-                requireRole(exchange, "MANAGER");
+                requireRole(exchange, "ADMINISTRATOR", "MANAGER");  // ✅ Added ADMINISTRATOR
                 writeJson(exchange, 200, db.restoreMerchant(merchantId, body(exchange)));
                 return;
             }
@@ -326,7 +326,7 @@ final class ApiHandler implements HttpHandler {
             return;
         }
         if (parts.size() == 2 && "pending".equals(parts.get(1)) && "GET".equals(method)) {
-            requireRole(exchange, "ADMINISTRATOR", "MANAGER", "OPERATIONS_STAFF");
+            requireRole(exchange, "ADMINISTRATOR", "MANAGER", "OPERATIONS_STAFF");  // ✅ Already has ADMIN
             writeJson(exchange, 200, Map.of("orders", db.listPendingOrders()));
             return;
         }

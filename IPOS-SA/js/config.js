@@ -136,24 +136,48 @@ export const actionIcons = {
 
 export const roleModules = {
   ADMINISTRATOR: [
+    // ========== USER MANAGEMENT ==========
     {
       pill: "Admin",
-      desc: "Create, view, update, and delete subsystem users.",
+      desc: "Authenticate and manage subsystem users.",
       fields: [
         ["username", "Username", "demo_user"],
-        ["email", "Email", "demo.user@infopharma.local"],
         ["password", "Password", "demo123"],
         ["role", "Role", "OPERATIONS_STAFF"],
-        ["merchantId", "Merchant ID (for merchant users)", ""],
-        ["active", "Active (true/false)", "true"],
       ],
       buttons: [
-        ["List User Accounts", "listUsers"],
+        ["Login Authentication", "loginAuthentication"],
+        ["List All Users", "listUsers"],
         ["Create User Account", "createUser"],
-        ["Update User Account", "updateUser"],
         ["Delete User Account", "deleteUser"],
       ],
     },
+    // ========== MERCHANT MANAGEMENT ==========
+    {
+      pill: "Admin",
+      desc: "Create and manage merchant accounts.",
+      fields: [
+        ["merchantId", "Merchant ID", "ACC0004"],
+        ["name", "Business Name", "New Pharmacy"],
+        ["email", "Email", "newpharmacy@example.com"],
+        ["password", "Password", "Welcome123!"],
+        ["address", "Business Address", "123 High Street, London"],
+        ["phone", "Phone Number", "020 1234 5678"],
+        ["creditLimit", "Credit Limit (£)", "5000"],
+        ["discountType", "Discount Type", "FIXED"],
+        ["fixedDiscountRate", "Fixed Discount Rate (%)", "3"],
+      ],
+      buttons: [
+        ["Create Merchant Account", "createMerchant"],
+        ["Update Merchant Details", "updateMerchant"],
+        ["View Merchant Information", "getMerchant"],
+        ["Delete Merchant Account", "deleteMerchant"],
+        ["Modify Merchant Settings", "updateDiscount"],
+        ["Delete Discount Plan", "deleteDiscountPlan"],
+        ["Restore Merchant from Default", "restoreMerchant"],
+      ],
+    },
+    // ========== CATALOGUE MANAGEMENT ==========
     {
       pill: "Admin",
       desc: "Catalogue administration actions.",
@@ -168,36 +192,121 @@ export const roleModules = {
         ["minimumStockLevel", "Minimum Stock", "10"],
       ],
       buttons: [
-        ["View Catalogue", "listProducts"],
+        ["List All Products", "listProducts"],
         ["Create Catalogue Item", "createProduct"],
         ["Update Catalogue Item", "updateProduct"],
         ["View Catalogue Item", "getProduct"],
-        ["Delete Catalogue Item", "deleteProduct"],
+        ["Delete Catalogue Product", "deleteProduct"],
         ["Restock Product", "restockProduct"],
         ["Set Minimum Stock", "setMinStock"],
       ],
     },
+    // ========== ORDER MANAGEMENT (Operations) ==========
     {
       pill: "Admin",
-      desc: "Administration reporting actions.",
+      desc: "Order processing and dispatch controls.",
       fields: [
-        ["merchantId", "Merchant ID", "ACC0001"],
-        ["start", "Start", "2026-03-01"],
-        ["end", "End", "2026-03-31"],
+        ["orderId", "Order ID", "1"],
+        ["status", "Status", "DISPATCHED"],
+        ["invoiceId", "Invoice ID", "1"],
+        ["courier", "Courier", "DHL"],
+        ["trackingNumber", "Tracking Number", "DHL-1001"],
+        ["expectedDelivery", "Expected Delivery", "2026-03-28"],
+        ["dispatchedBy", "Dispatched By", "delivery"],
+      ],
+      buttons: [
+        ["View All Orders", "listOrders"],
+        ["View Pending Orders", "listPendingOrders"],
+        ["View Order Details", "getOrder"],
+        ["Update Order Status", "updateOrderStatus"],
+        ["Generate Invoice", "generateInvoice"],
+      ],
+    },
+    // ========== PAYMENT MANAGEMENT (Accounting) ==========
+    {
+      pill: "Admin",
+      desc: "Record merchant payments in different payment modes.",
+      fields: [
+        ["merchantId", "Merchant ID", "ACC0003"],
+        ["amount", "Amount", "15.50"],
+        ["method", "Method", "CARD"],
+        ["reference", "Reference", "CARD-1002"],
+      ],
+      buttons: [
+        ["List All Payments", "listPayments"],
+        ["Record Card Payment", "recordPayment"],
+        ["Record Bank Transfer", "recordPayment"],
+        ["Record Cheque Payment", "recordPayment"],
+        ["Merchant Balance", "merchantBalance"],
+      ],
+    },
+    // ========== REPORTING ==========
+    {
+      pill: "Admin",
+      desc: "Generate all system reports.",
+      fields: [
+        ["merchantId", "Merchant ID", "ACC0003"],
+        ["start", "Start Date", "2026-03-01"],
+        ["end", "End Date", "2026-03-31"],
       ],
       buttons: [
         ["Low Stock Report", "reportLowStock"],
         ["Turnover Report", "reportTurnover"],
+        ["Stock Turnover Report", "reportStockTurnover"],
+        ["Debtor Reminders", "reportDebtorReminders"],
+        ["Merchant Orders Report", "reportMerchantOrders"],
+        ["Merchant Activity Report", "reportMerchantActivity"],
+        ["Merchant Invoices Report", "reportMerchantInvoices"],
         ["Company Invoices Report", "reportCompanyInvoices"],
       ],
     },
+    // ========== NON-COMMERCIAL APPLICATIONS ==========
     {
       pill: "Admin",
-      desc: "Delete merchant and ALL associated data (orders, invoices, payments) - shows cascade",
+      desc: "Non-commercial application decisions from the portal.",
       fields: [
-        ["merchantId", "Merchant ID to Delete", ""]
+        ["applicationEmail", "Application Email", "cool1@example.com"],
+        ["memberType", "Member Type", "NON_COMMERCIAL"],
+        ["accountNo", "Account No", "PU0004"],
+        ["companyName", "Company Name", "Pond Pharmacy"],
+        ["companyAddress", "Company Address", "Chislehurst, 25 High Street, BR7 5BN"],
+        ["companyRegistration", "Company Registration", "UK10003429CompH"],
+        ["applicationId", "Application ID", "1"],
       ],
-      buttons: [["Test Cascaded Delete", "testCascadeDelete"]],
+      buttons: [
+        ["Create Application", "createApplication"],
+        ["List Applications", "listApplications"],
+        ["Approve Application", "approveApplication"],
+        ["Reject Application", "rejectApplication"],
+      ],
+    },
+    // ========== INTEGRATION ==========
+    {
+      pill: "Admin",
+      desc: "Cross-subsystem integration testing.",
+      fields: [
+        ["sender", "Mail Sender", "ipos-sa@londonsoftwarehouse.local"],
+        ["receivers", "Mail Receivers JSON", '["cool@example.com"]', "textarea"],
+        ["subject", "Mail Subject", "IPOS-SA integration test"],
+        ["mailBody", "Mail Body", "Approved. Temporary password issued.", "textarea"],
+        ["amount", "Payment Amount", "29.99"],
+        ["senderName", "Sender Name", "Peter Popov"],
+        ["senderCardNumber", "Sender Card Number", "0000 000000 0000 0001"],
+        ["senderCVV", "Sender CVV", "3245"],
+        ["senderExpiryDate", "Sender Expiry Date", "30/08/2030"],
+        ["senderBillingAddress", "Sender Billing Address", "1 Demo Street, London"],
+        ["senderEmail", "Sender Email", "cool@example.com"],
+        ["receiverName", "Receiver Name", "InfoPharma Ltd"],
+        ["receiverBankName", "Receiver Bank Name", "Demo Bank"],
+        ["receiverAccountNumber", "Receiver Account Number", "12345678"],
+        ["receiverSortCode", "Receiver Sort Code", "12-34-56"],
+      ],
+      buttons: [
+        ["Integration Status", "integrationStatus"],
+        ["Relay PU Mail", "sendPuMail"],
+        ["Relay PU Payment", "sendPuPayment"],
+        ["Relay CA Stock Sync", "sendCaStock"],
+      ],
     },
   ],
 
