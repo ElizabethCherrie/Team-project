@@ -43,6 +43,7 @@ export const actionDescriptions = {
   setMinStock: "Update the minimum stock threshold for a product.",
   listUsers: "View all login users for the subsystem.",
   createUser: "Create a subsystem login account.",
+  changeRole: "Change a user's role, email, password, or active status (same as creating a user).",
   updateUser: "Update a subsystem login account and role assignment.",
   deleteUser: "Delete a subsystem login account.",
   merchantBalance: "Check the merchant balance and current account status.",
@@ -136,6 +137,7 @@ export const actionIcons = {
   createOrder: "O",
   listMyOrders: "O",
   listMyInvoices: "I",
+  changeRole: "U",
 };
 
 export const roleModules = {
@@ -154,6 +156,7 @@ export const roleModules = {
         ["Login Authentication", "loginAuthentication"],
         ["List All Users", "listUsers"],
         ["Create User Account", "createUser"],
+        ["Change User Role", "changeRole"],
         ["Delete User Account", "deleteUser"],
       ],
     },

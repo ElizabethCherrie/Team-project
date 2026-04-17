@@ -78,6 +78,15 @@ export async function runAction(action, form, label) {
           },
         });
         break;
+      case "changeRole":
+        result = await apiRequest(`/users/${values.username}`, {
+          method: "PUT",
+          body: {
+            password: values.password || undefined,
+            role: values.role || undefined,
+          },
+        });
+        break;
       case "updateUser":
         result = await apiRequest(`/users/${values.username}`, {
           method: "PUT",
