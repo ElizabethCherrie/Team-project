@@ -17,7 +17,7 @@ public class DatabaseTest {
 
     private Database db;
     private Path tempDb;
-    
+
     // this is the temporary database
     @BeforeEach
     void setUp() throws Exception {
@@ -34,7 +34,7 @@ public class DatabaseTest {
         Files.deleteIfExists(tempDb);
     }
 
- 
+
 
     //this helper logs in and returns a valid session header
     private Headers sessionFor(String username, String password) throws Exception {
@@ -45,10 +45,10 @@ public class DatabaseTest {
         return headers;
     }
 
- 
 
-    // this section is the Account Management 
- 
+
+    // this section is the Account Management
+
     // So this creates a merchant with all the required details and checks that the response confirms creation and returns the correct merchant ID
     @Test
     void ACC01_createMerchant_fullDetailsFixedDiscount_succeeds() throws Exception {
@@ -71,9 +71,9 @@ public class DatabaseTest {
                 "ACC-01: Returned merchant ID should match input");
     }
 
-  
-    
-    // Second, attempts to create a merchant with a missing section  
+
+
+    // Second, attempts to create a merchant with a missing section
     @Test
     void ACC02_createMerchant_missingCreditLimit_throwsException() {
         Map<String, Object> body = Map.of(
@@ -91,9 +91,39 @@ public class DatabaseTest {
                 "ACC-02: Missing mandatory field should prevent account creation");
     }
 
-   
-    
-    //So it creates a merchant with the credit limit of 0 
+
+    //This will create a merchant with a duplicate merchant ID then checks if the system prevents this
+    @Test
+    void ACC03_createMerchant_duplicateId_throwsException() throws Exception {
+        Map<String, Object> body = Map.of(
+                "merchantId", "MCH-DUP-01",
+                "name", "Duplicate Pharmacy",
+                "email", "dup@pharmacy.com",
+                "address", "5 Test Street, London",
+                "creditLimit", 3000.0,
+                "username", "dupmerchant01",
+                "password", "duppass01"
+        );
+        db.createMerchant(body);
+
+        Map<String, Object> duplicate = Map.of(
+                "merchantId", "MCH-DUP-01",
+                "name", "Another Pharmacy",
+                "email", "another@pharmacy.com",
+                "address", "6 Test Street, London",
+                "creditLimit", 2000.0,
+                "username", "dupmerchant02",
+                "password", "duppass02"
+        );
+
+        assertThrows(Exception.class,
+                () -> db.createMerchant(duplicate),
+                "ACC-03: Duplicate merchant ID should throw an exception");
+    }
+
+
+
+    //So it creates a merchant with the credit limit of 0
     @Test
     void ACC04_createMerchant_creditLimitZero_succeeds() throws Exception {
         Map<String, Object> body = Map.of(
@@ -113,9 +143,9 @@ public class DatabaseTest {
                 "ACC-04: Credit limit of 0 should be accepted as a valid boundary value");
     }
 
-  
-    
-    // Updates a merchants credit limit to a new valid limit bigger than 0 
+
+
+    // Updates a merchants credit limit to a new valid limit bigger than 0
     @Test
     void ACC05_updateMerchant_validCreditLimit_succeeds() throws Exception {
         Map<String, Object> result = db.updateMerchant("ACC0001",
@@ -125,7 +155,18 @@ public class DatabaseTest {
                 "ACC-05: Valid credit limit update should be confirmed");
     }
 
-    
+
+    // Just updates the merchants credit limit with a negative value
+    @Test
+    void ACC06_updateMerchant_nonExistentMerchant_throws404() {
+        ApiException ex = assertThrows(ApiException.class,
+                () -> db.updateMerchant("DOES_NOT_EXIST",
+                        Map.of("creditLimit", 5000.0)));
+        assertEquals(404, ex.statusCode,
+                "ACC-06: Updating non-existent merchant should return 404");
+    }
+
+
     //updates the merchant discount plan to teh FLEXIBLE type with teh correct thresholds
     @Test
     void ACC07_updateDiscountPlan_flexibleWithValidThresholds_succeeds() throws Exception {
@@ -142,8 +183,8 @@ public class DatabaseTest {
                 "ACC-07: Discount type should be updated to FLEXIBLE");
     }
 
-    
-    
+
+
     //Updates the discount plan with a value that is invalid and makes sure the system rejetcs it
     @Test
     void ACC08_updateDiscountPlan_invalidType_throwsException() {
@@ -155,9 +196,9 @@ public class DatabaseTest {
                 "ACC-08: Invalid discount type should be rejected with 400");
     }
 
- 
-    
-    //restores a merchant account that isnt active with approval 
+
+
+    //restores a merchant account that isnt active with approval
     @Test
     void ACC09_restoreMerchant_withDirectorApproval_succeeds() throws Exception {
         Map<String, Object> result = db.restoreMerchant("ACC0001", Map.of(
@@ -171,11 +212,11 @@ public class DatabaseTest {
                 "ACC-09: Merchant status should be set to NORMAL");
     }
 
-    
-    // This section is  Catalogue Management 
-    
-    
-   
+
+    // This section is  Catalogue Management
+
+
+
     //Adds a new product to the catalogue with valid details and checks that it can be retrieved successfully
     @Test
     void CAT01_createProduct_validDetails_productAppearsInCatalogue() throws Exception {
@@ -193,21 +234,21 @@ public class DatabaseTest {
                 "CAT-01: Created product should appear in the catalogue");
     }
 
-   
+
     // tries to get the product with a unknown id
     @Test
-    void CAT_getProduct_unknownId_throws404() {
+    void CAT02_getProduct_unknownId_throws404() {
         ApiException ex = assertThrows(ApiException.class,
                 () -> db.getProduct("UNKNOWN-ID-999"),
                 "CAT: Unknown product ID should return 404");
         assertEquals(404, ex.statusCode);
     }
 
-  
-    
+
+
     //Deletes a existing product and makes sure its deleted
     @Test
-    void CAT_deleteProduct_existingProduct_removedFromCatalogue() throws Exception {
+    void CAT03_deleteProduct_existingProduct_removedFromCatalogue() throws Exception {
         db.createProduct(Map.of(
                 "productId", "DEL-TEST-01",
                 "name", "Product To Delete",
@@ -223,11 +264,11 @@ public class DatabaseTest {
                 "CAT: Deleted product should no longer be found in catalogue");
     }
 
-   
-    
+
+
     // Adds stock to an existing product and checks that the stock level increases by the correct amount
     @Test
-    void CAT_addStock_validQuantity_stockLevelIncreases() throws Exception {
+    void CAT04_addStock_validQuantity_stockLevelIncreases() throws Exception {
         int before = ((Number) db.getProduct("10000002").get("stock_level")).intValue();
 
         db.addStock("10000002", Map.of("quantity", 500));
@@ -237,11 +278,11 @@ public class DatabaseTest {
                 "CAT: Stock level should increase by exactly the restocked quantity");
     }
 
- 
-    
+
+
     //so searches for a product by the name keyword
     @Test
-    void CAT_searchProducts_validKeyword_returnsMatchingProducts() throws Exception {
+    void CAT05_searchProducts_validKeyword_returnsMatchingProducts() throws Exception {
         List<Map<String, Object>> results = db.searchProducts("Paracetamol");
 
         assertNotNull(results,
@@ -252,22 +293,33 @@ public class DatabaseTest {
                 "CAT: First result should be Paracetamol");
     }
 
-  
-    
+
+
     //Adds a stock with a quantity of 0 and checks that the system rejects it with a 400 error
     @Test
-    void CAT_addStock_zeroQuantity_throws400() {
+    void CAT06_addStock_zeroQuantity_throws400() {
         ApiException ex = assertThrows(ApiException.class,
                 () -> db.addStock("10000001", Map.of("quantity", 0)));
         assertEquals(400, ex.statusCode,
                 "CAT: Zero quantity restock should be rejected with 400");
     }
 
- 
-    // this is the Order Management section 
-    
-    
-   
+
+    // Updates the minimum stock level for a product
+    @Test
+    void CAT07_updateMinimumStockLevel_validValue_succeeds() throws Exception {
+        Map<String, Object> result = db.updateMinimumStock("10000001",
+                Map.of("minimumStockLevel", 500));
+
+        assertEquals("Minimum stock level updated", result.get("message"),
+                "CAT-07: Minimum stock level update should be confirmed");
+    }
+
+
+    // this is the Order Management section
+
+
+
     //Creates a order valid details and checks its created successfully
     @Test
     void ORD01_createOrder_validMerchantAndStock_orderCreatedStockReduced() throws Exception {
@@ -288,8 +340,8 @@ public class DatabaseTest {
                 "ORD-01: Stock should be reduced by the ordered quantity");
     }
 
-   
-    
+
+
     // so checks when a order quantity is higher than the stock availability.
     @Test
     void ORD02_createOrder_quantityExceedsStock_orderRejected() throws Exception {
@@ -306,8 +358,8 @@ public class DatabaseTest {
                 "ORD-02: Order exceeding stock should be rejected with 400");
     }
 
-  
-    
+
+
     // Dose it contain a unknown id
     @Test
     void ORD03_createOrder_unknownProductId_orderRejected() throws Exception {
@@ -323,7 +375,7 @@ public class DatabaseTest {
                 "ORD-03: Unknown product ID should cause order to be rejected with 404");
     }
 
-  
+
     //Dose the system reject a empty order
     @Test
     void ORD04_createOrder_emptyItemsList_orderRejected() throws Exception {
@@ -353,9 +405,47 @@ public class DatabaseTest {
                 "ORD-05: Quantity of 0 should be rejected with a 400 validation error");
     }
 
-    
-    
-    // Updates the order to DISPATCHED with a valid courier and tracking info 
+
+    //This will update the order status to PROCESSING from ACCEPTED
+    @Test
+    void ORD06_updateOrderStatus_toProcessing_succeeds() throws Exception {
+        Headers headers = sessionFor("city", "northampton");
+        Map<String, Object> orderResult = db.createOrder(headers, Map.of(
+                "merchantId", "ACC0001",
+                "items", List.of(Map.of("productId", "10000001", "quantity", 5))
+        ));
+        long orderId = ((Number) orderResult.get("orderId")).longValue();
+
+        Map<String, Object> result = db.updateOrderStatus(orderId,
+                Map.of("status", "PROCESSING"));
+
+        assertEquals("Order status updated", result.get("message"),
+                "ORD-06: Valid transition to PROCESSING should succeed");
+        assertEquals("PROCESSING", result.get("status"),
+                "ORD-06: Order status should be PROCESSING");
+    }
+
+
+
+    //This tries to update the status of the order from ACCEPTED straight to DELIVERED
+    @Test
+    void ORD07_updateOrderStatus_invalidTransition_throws400() throws Exception {
+        Headers headers = sessionFor("city", "northampton");
+        Map<String, Object> orderResult = db.createOrder(headers, Map.of(
+                "merchantId", "ACC0001",
+                "items", List.of(Map.of("productId", "10000001", "quantity", 5))
+        ));
+        long orderId = ((Number) orderResult.get("orderId")).longValue();
+
+        ApiException ex = assertThrows(ApiException.class,
+                () -> db.updateOrderStatus(orderId,
+                        Map.of("status", "DELIVERED")));
+        assertEquals(400, ex.statusCode,
+                "ORD-07: Invalid status transition should be rejected with 400");
+    }
+
+
+    // Updates the order to DISPATCHED with a valid courier and tracking info
     @Test
     void ORD08_updateOrderStatus_dispatched_withValidCourierInfo_succeeds() throws Exception {
         // First create an order to get an order ID
@@ -383,8 +473,8 @@ public class DatabaseTest {
                 "ORD-08: Order status should be updated to DISPATCHED");
     }
 
-   
-    
+
+
     // This updates the order to DISPATCHED without providing the courier info and checks that the system rejects it with a 400 error
     @Test
     void ORD09_updateOrderStatus_dispatched_missingCourierInfo_throws400() throws Exception {
