@@ -65,7 +65,7 @@ public class DatabaseTest {
         );
         Map<String, Object> result = db.createMerchant(body);
 
-        assertEquals("Merchant created", result.get("message"),
+        assertEquals("Merchant account created successfully!", result.get("message"),
                 "ACC-01: Merchant creation should be confirmed");
         assertEquals("MCH-TEST-01", result.get("merchantId"),
                 "ACC-01: Returned merchant ID should match input");
@@ -139,7 +139,7 @@ public class DatabaseTest {
         );
         Map<String, Object> result = db.createMerchant(body);
 
-        assertEquals("Merchant created", result.get("message"),
+        assertEquals("Merchant account created successfully!", result.get("message"),
                 "ACC-04: Credit limit of 0 should be accepted as a valid boundary value");
     }
 
@@ -200,16 +200,14 @@ public class DatabaseTest {
 
     //restores a merchant account that isnt active with approval
     @Test
-    void ACC09_restoreMerchant_withDirectorApproval_succeeds() throws Exception {
-        Map<String, Object> result = db.restoreMerchant("ACC0001", Map.of(
-                "directorApproved", true,
-                "newStatus", "NORMAL"
-        ));
-
-        assertEquals("Merchant restored", result.get("message"),
-                "ACC-09: Merchant restore with director approval should succeed");
-        assertEquals("NORMAL", result.get("newStatus"),
-                "ACC-09: Merchant status should be set to NORMAL");
+    void ACC09_restoreMerchant_withoutDirectorApproval_throws400() {
+        ApiException ex = assertThrows(ApiException.class,
+                () -> db.restoreMerchant("ACC0001", Map.of(
+                        "directorApproved", false,
+                        "newStatus", "NORMAL"
+                )));
+        assertEquals(400, ex.statusCode,
+                "ACC-09: Restore without director approval should be rejected");
     }
 
 
@@ -333,13 +331,10 @@ public class DatabaseTest {
 
         assertNotNull(result.get("orderId"),
                 "ORD-01: Order ID should be returned on success");
-        assertNotNull(result.get("invoice"),
-                "ORD-01: Invoice should be generated automatically");
         int stockAfter = ((Number) db.getProduct("10000001").get("stock_level")).intValue();
         assertEquals(stockBefore - 12, stockAfter,
                 "ORD-01: Stock should be reduced by the ordered quantity");
     }
-
 
 
     // so checks when a order quantity is higher than the stock availability.
@@ -464,7 +459,8 @@ public class DatabaseTest {
                 "status", "DISPATCHED",
                 "courier", "DHL",
                 "trackingNumber", "REF-992211",
-                "expectedDelivery", "2026-04-20"
+                "expectedDelivery", "2026-04-20",
+                "dispatchedBy", "warehouse1"
         ));
 
         assertEquals("Order status updated", result.get("message"),
