@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS merchants (
 CREATE TABLE IF NOT EXISTS products (
     product_id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    package_type VARCHAR(64),
+    unit VARCHAR(64),
+    units_in_pack INT,
     unit_price DECIMAL(12,2) NOT NULL,
     stock_level INT NOT NULL,
     minimum_stock_level INT NOT NULL,
