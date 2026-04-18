@@ -102,8 +102,19 @@ final class ApiHandler implements HttpHandler {
             case "reports" -> handleReports(exchange, method, parts);
             case "non-commercial-applications" -> handleApplications(exchange, method, parts);
             case "integrations" -> handleIntegrations(exchange, method, parts);
+            case "admin" -> handleAdmin(exchange, method, parts);
             default -> throw new ApiException(404, "Route not found");
         }
+    }
+
+    private void handleAdmin(HttpExchange exchange, String method, List<String> parts) throws Exception {
+        requireRole(exchange, "ADMINISTRATOR", "MANAGER");
+        if (parts.size() == 2 && "sweep-accounts".equals(parts.get(1)) && "POST".equals(method)) {
+            db.runAccountStatusSweep();
+            writeJson(exchange, 200, Map.of("message", "Account status sweep completed"));
+            return;
+        }
+        throw new ApiException(404, "Route not found");
     }
 
     /**

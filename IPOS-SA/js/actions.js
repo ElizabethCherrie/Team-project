@@ -115,6 +115,9 @@ export async function runAction(action, form, label) {
       case "integrationStatus":
         result = await apiRequest("/integrations");
         break;
+      case "sweepAccounts":
+        result = await apiRequest("/admin/sweep-accounts", { method: "POST" });
+        break;
       case "sendCaStock":
         result = await apiRequest("/integrations/ca/stock", {
           method: "POST",
