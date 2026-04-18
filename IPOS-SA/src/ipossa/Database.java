@@ -892,6 +892,31 @@ final class Database {
     }
 
     /**
+     * Evaluates and updates account statuses for every merchant in the database.
+     * Intended to be called on a scheduled basis so that SUSPENDED and IN_DEFAULT
+     * transitions happen automatically without requiring a merchant login.
+     */
+    void runAccountStatusSweep() {
+        try (Connection connection = connect();
+             Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("SELECT merchant_id FROM merchants")) {
+            List<String> ids = new ArrayList<>();
+            while (rs.next()) {
+                ids.add(rs.getString(1));
+            }
+            for (String id : ids) {
+                try {
+                    evaluateMerchantAccount(connection, id);
+                } catch (Exception e) {
+                    System.err.println("Account sweep failed for merchant " + id + ": " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Account status sweep error: " + e.getMessage());
+        }
+    }
+
+    /**
      * Retrieves all products from the database ordered by product ID.
      * <p>
      * The returned list contains one map per product, with the selected product fields converted into

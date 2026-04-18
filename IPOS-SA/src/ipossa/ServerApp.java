@@ -6,6 +6,8 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Entry point for the IPOS-SA prototype server.
@@ -70,6 +72,16 @@ public final class ServerApp {
         server.createContext("/", new ApiHandler(database, staticRoot));
         server.setExecutor(Executors.newFixedThreadPool(10));
         server.start();
+
+        // Sweep all merchant account statuses immediately, then every hour.
+        // This ensures SUSPENDED (15 days overdue) and IN_DEFAULT (30 days overdue)
+        // transitions happen automatically without requiring a merchant login.
+        ScheduledExecutorService sweepScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "account-status-sweep");
+            t.setDaemon(true);
+            return t;
+        });
+        sweepScheduler.scheduleAtFixedRate(database::runAccountStatusSweep, 0, 1, TimeUnit.HOURS);
 
         System.out.println("IPOS-SA REST API started on port " + port);
         System.out.println("SQLite database: " + dbPath);
