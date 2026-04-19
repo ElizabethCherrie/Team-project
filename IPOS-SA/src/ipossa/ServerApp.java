@@ -73,9 +73,6 @@ public final class ServerApp {
         server.setExecutor(Executors.newFixedThreadPool(10));
         server.start();
 
-        // Sweep all merchant account statuses immediately, then every hour.
-        // This ensures SUSPENDED (15 days overdue) and IN_DEFAULT (30 days overdue)
-        // transitions happen automatically without requiring a merchant login.
         ScheduledExecutorService sweepScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "account-status-sweep");
             t.setDaemon(true);
@@ -86,7 +83,7 @@ public final class ServerApp {
         System.out.println("IPOS-SA REST API started on port " + port);
         System.out.println("SQLite database: " + dbPath);
         System.out.println("Static frontend root: " + staticRoot);
-        System.out.println("Seeded users: Sysdba/London_weighting, manager/Get_it_done, accountant/Count_money, delivery/Too_dark, city/northampton");
+        System.out.println("Seeded users: Sysdba/London_weighting, manager/Get_it_done, accountant/Count_money, delivery/Too_dark, city/demo123");
         System.out.println("Integration config: " + integrationClient.describeConfiguration());
         return server;
     }
